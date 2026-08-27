@@ -170,13 +170,13 @@ def validate_data(
             checks.append({
                 "criterio": "Tipos de Datos",
                 "passed": True,
-                "message": "Todas las columnas críticas tienen un formato numérico válido."
+                "message": "Las columnas críticas tienen un formato válido."
             })
 
         # 7. Valores Imposibles (Límites Físicos y Lógicos)
         impossible_checks = []
-        if not data["Edad"].between(0, 18).all():
-            impossible_checks.append("Edad fuera del rango esperado (0-18 años)")
+        if not data["Edad"].between(6, 10).all():
+            impossible_checks.append("Edad fuera del rango esperado (6-10 años)")
         if not datos_muestra["Peso_kg"].between(5, 150).all():
             impossible_checks.append("Peso fuera del rango esperado (5-150 kg)")
         if not datos_muestra["Altura_cm"].between(50, 220).all():
@@ -231,7 +231,7 @@ def validate_data(
         checks.append({
             "criterio": "Límites de Detección",
             "passed": passed_lod,
-            "message": "Todas las concentraciones superan los límites de detección típicos." if passed_lod else f"Valores bajo el LOD detectados: {', '.join(lod_issues)}."
+            "message": "Las concentraciones superan los límites de detección." if passed_lod else f"Valores bajo el LOD detectados: {', '.join(lod_issues)}."
         })
 
         # 10. Variabilidad de Variables (Detectar variables constantes en la muestra analítica)
