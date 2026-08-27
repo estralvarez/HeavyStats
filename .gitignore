@@ -28,6 +28,7 @@ MANIFEST
 
 # Jupyter Notebook
 .ipynb_checkpoints
+*.ipynb
 
 # Virtual Environments
 .venv/
@@ -41,3 +42,4 @@ env/
 # Environment variables
 .env
 .env.*
+src/notebooks/*.ipynb

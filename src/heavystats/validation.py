@@ -1,6 +1,5 @@
 import pandas as pd
 from typing import Tuple, List, Dict, Any, Optional
-import json
 import os
 
 class ValidationReport:
@@ -54,23 +53,6 @@ class ValidationReport:
                 os.makedirs(dir_path, exist_ok=True)
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(content)
-
-    def to_json(self, filepath: Optional[str] = None) -> str:
-        serialized_checks = [
-            {
-                "criterio": str(check["criterio"]),
-                "passed": bool(check["passed"]),
-                "message": str(check["message"])
-            }
-            for check in self.checks
-        ]
-        data = {
-            "all_passed": bool(self.all_passed),
-            "checks": serialized_checks
-        }
-        json_str = json.dumps(data, indent=4, ensure_ascii=False)
-        self._write_file(filepath, json_str)
-        return json_str
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convierte los resultados en un DataFrame."""
@@ -252,31 +234,24 @@ def validate_data(
             "message": "Todas las concentraciones superan los límites de detección típicos." if passed_lod else f"Valores bajo el LOD detectados: {', '.join(lod_issues)}."
         })
 
+        # 10. Variabilidad de Variables (Detectar variables constantes en la muestra analítica)
+        constant_cols = []
+        variability_cols = ["Sexo", "Sector", "Es_Expuesto", "Riesgo_Pb", "Riesgo_Hg", "Riesgo_Cd"]
+        for col in variability_cols:
+            if col in data.columns:
+                unique_vals = data.loc[sample_mask, col].dropna().unique()
+                if len(unique_vals) == 1:
+                    constant_cols.append(f"{col} (sólo contiene '{unique_vals[0]}')")
+                    
+        passed_variability = len(constant_cols) == 0
+        checks.append({
+            "criterio": "Variabilidad Mínima",
+            "passed": passed_variability,
+            "message": "Todas las variables de clasificación tienen variabilidad." if passed_variability else f"Variables constantes detectadas en la muestra: {', '.join(constant_cols)}."
+        })
+
+
+
     # Ya no imprimimos/mostramos aquí. Retornamos el objeto limpiamente.
     return ValidationReport(checks)
 
-if __name__ == "__main__":
-    import pathlib
-    from heavystats.cleaning import load_default_data
-    BASE_DIR = pathlib.Path(__file__).parent
-    df = load_default_data()
-    
-    report = validate_data(df)
-    
-    # Exportar a JSON para el portal de documentación de Astro
-    json_path = BASE_DIR / "../../../../QABLOG/HeavyDocs/src/data/validation_report.json"
-    try:
-        report.to_json(json_path)
-        print(f"Reporte de validación exportado exitosamente a JSON en: {json_path}")
-    except Exception as e:
-        print(f"No se pudo exportar el reporte a JSON: {e}")
-    
-    try:
-        from IPython.display import display
-        from IPython import get_ipython
-        if get_ipython() is not None:
-            display(report)
-        else:
-            print(report)
-    except (ImportError, NameError):
-        print(report)

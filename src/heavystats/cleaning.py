@@ -1,16 +1,25 @@
 import pathlib
-import json
 import os
 import pandas as pd
 import numpy as np
 from typing import Tuple, List, Dict, Optional, Any
 
 
-def load_default_data() -> pd.DataFrame:
-    """Carga el DataFrame por defecto del archivo CSV de manera robusta,
-    corrigiendo tipos de datos y caracteres mal codificados."""
+def load_data(csv_path: Optional[Any] = None) -> pd.DataFrame:
+    """Carga el DataFrame de un archivo CSV de manera robusta,
+    corrigiendo tipos de datos y caracteres mal codificados.
+    
+    Si no se proporciona csv_path, se usará el archivo por defecto."""
     BASE_DIR = pathlib.Path(__file__).parent
-    CSV_PATH = BASE_DIR / "../data/muestra_metales_pesados_23_07_2026.csv"
+    
+    if csv_path is None:
+        CSV_PATH = BASE_DIR / "data/data_example.csv"
+    else:
+        CSV_PATH = pathlib.Path(csv_path)
+        
+    # Crear la carpeta contenedora si no existe
+    CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    
     if not CSV_PATH.exists():
         raise FileNotFoundError(f"No se pudo encontrar el archivo CSV en la ruta: {CSV_PATH.resolve()}")
     
@@ -35,7 +44,7 @@ def load_default_data() -> pd.DataFrame:
     
     # Aplicar la limpieza en todas las columnas de tipo string
     for col in df.columns:
-        if df[col].dtype == "object":
+        if pd.api.types.is_string_dtype(df[col]):
             for bad, good in replacements.items():
                 df[col] = df[col].str.replace(bad, good, regex=False)
                 
@@ -48,7 +57,7 @@ def __getattr__(name: str):
     if name == "df":
         global _df
         if _df is None:
-            _df = load_default_data()
+            _df = load_data()
         return _df
     raise AttributeError(f"module {__name__} has no attribute {name}")
 
@@ -120,27 +129,6 @@ class VariableTypeReport(dict):
         report_str = "\n".join(lines)
         self._write_file(filepath, report_str)
         return report_str
-
-    def to_json(self, filepath: Optional[str] = None) -> str:
-        """Exporta la estructura a JSON."""
-        report_data = {
-            "shape": [int(self.shape[0]), int(self.shape[1])],
-            "types": {}
-        }
-        for dtype, cols in self.items():
-            report_data["types"][str(dtype)] = {
-                "count": len(cols),
-                "columns": [
-                    {
-                        "name": str(col),
-                        "nulls": int(self._nulls.get(col, 0))
-                    }
-                    for col in cols
-                ]
-            }
-        json_str = json.dumps(report_data, indent=4, ensure_ascii=False)
-        self._write_file(filepath, json_str)
-        return json_str
 
     def _repr_markdown_(self) -> str:
         """Renderizado automático Markdown en Jupyter Notebooks."""
@@ -216,13 +204,6 @@ class VariablesTableReport:
         report_str = "\n".join(lines)
         self._write_file(filepath, report_str)
         return report_str
-
-    def to_json(self, filepath: Optional[str] = None) -> str:
-        """Exporta la estructura a JSON."""
-        data = {"variables": self.rows}
-        json_str = json.dumps(data, indent=4, ensure_ascii=False)
-        self._write_file(filepath, json_str)
-        return json_str
 
     def _repr_markdown_(self) -> str:
         """Renderizado automático en Markdown para Jupyter Notebook."""
@@ -309,3 +290,105 @@ def select_metal(
         filtered_data = filtered_data.dropna(subset=[target_col])
 
     return filtered_data.reset_index(drop=True)
+
+
+def standardize_boolean_columns(df: pd.DataFrame, columns: Optional[List[str]] = None) -> pd.DataFrame:
+    """Estandariza columnas de texto binario a valores limpios 'SI' o 'NO',
+    preservando los valores nulos (NaN)."""
+    df_clean = df.copy()
+    if columns is None:
+        columns = df_clean.select_dtypes(include=["object", "category"]).columns.tolist()
+        
+    mapping = {
+        "sí": "SI", "si": "SI", "sï": "SI", "sI": "SI",
+        "no": "NO"
+    }
+    
+    for col in columns:
+        if col in df_clean.columns:
+            # Aplicar sólo si el tipo de columna es de tipo string/objeto
+            if pd.api.types.is_string_dtype(df_clean[col]) or pd.api.types.is_categorical_dtype(df_clean[col]):
+                def clean_val(val):
+                    if pd.isna(val):
+                        return val
+                    val_str = str(val).strip().lower()
+                    if val_str in mapping:
+                        return mapping[val_str]
+                    return val
+                df_clean[col] = df_clean[col].apply(clean_val)
+    return df_clean
+
+
+def desaggregate_multiple_responses(
+    df: pd.DataFrame, 
+    columns: List[str], 
+    separator: str = ";"
+) -> pd.DataFrame:
+    """Desagrega columnas de respuestas múltiples separadas por un delimitador
+    en variables binarias individuales (valores 0 o 1, y NaN para valores nulos)."""
+    df_clean = df.copy()
+    for col in columns:
+        if col not in df_clean.columns:
+            continue
+            
+        # Obtener todas las opciones únicas
+        all_choices = set()
+        for val in df_clean[col].dropna():
+            choices = [c.strip() for c in str(val).split(separator) if c.strip()]
+            all_choices.update(choices)
+            
+        # Filtrar opciones negativas típicas
+        negative_phrases = {
+            "ninguna de las anteriores", "ninguno de los anteriores", 
+            "ninguna de las anteriores.", "ninguno de los anteriores.",
+            "ninguno", "ninguna", "ningún", "ningun", "nada"
+        }
+        valid_choices = [c for c in all_choices if c.lower() not in negative_phrases]
+        
+        # Crear columnas binarias
+        for choice in sorted(valid_choices):
+            new_col_name = f"{col}_{choice.replace(' ', '_')}"
+            df_clean[new_col_name] = df_clean[col].apply(
+                lambda val: 1 if pd.notna(val) and choice in [c.strip() for c in str(val).split(separator)]
+                else (np.nan if pd.isna(val) else 0)
+            )
+            df_clean[new_col_name] = df_clean[new_col_name].astype("Int64")
+            
+    return df_clean
+
+
+def encode_dietary_frequencies(
+    df: pd.DataFrame, 
+    columns: Optional[List[str]] = None,
+    mapping: Optional[Dict[str, int]] = None
+) -> pd.DataFrame:
+    """Codifica frecuencias de consumo de alimentos a variables ordinales
+    de tipo entero (Int64), preservando los valores nulos (NaN)."""
+    df_clean = df.copy()
+    if columns is None:
+        columns = [col for col in df_clean.columns if col.startswith("Alim_")]
+        
+    if mapping is None:
+        mapping = {
+            "nunca": 0,
+            "rara vez": 1,
+            "a veces": 2,
+            "frecuentemente": 3,
+            "diario": 4
+        }
+        
+    for col in columns:
+        if col in df_clean.columns:
+            def map_freq(val):
+                if pd.isna(val):
+                    return val
+                val_str = str(val).strip().lower()
+                return mapping.get(val_str, val)
+                
+            df_clean[col] = df_clean[col].apply(map_freq)
+            try:
+                df_clean[col] = df_clean[col].astype("Int64")
+            except Exception:
+                pass
+                
+    return df_clean
