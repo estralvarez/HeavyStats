@@ -3,7 +3,6 @@ import pathlib
 import os
 import pandas as pd
 import numpy as np
-import scipy.stats as stats
 from typing import Tuple, List, Dict, Any, Optional
 from heavystats.cleaning import load_data, standardize_boolean_columns
 
@@ -218,6 +217,8 @@ def compare_groups(
     
     Retorna un ComparationReport.
     """
+    import scipy.stats as stats
+    
     if sample_col not in data.columns:
         raise ValueError(f"La columna identificadora '{sample_col}' no existe en el DataFrame.")
         

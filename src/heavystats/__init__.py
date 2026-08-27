@@ -1,3 +1,5 @@
+__version__ = "0.1.0"
+
 from heavystats.validation import ValidationReport, validate_data
 from heavystats.comparation import (
     ComparationReport,
@@ -19,6 +21,7 @@ from heavystats.cleaning import (
 )
 
 __all__ = [
+    "__version__",
     "ValidationReport",
     "validate_data",
     "ComparationReport",
