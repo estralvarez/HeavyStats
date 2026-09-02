@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang='es'>
+<head>
+  <meta charset='UTF-8'>
+  <title>Análisis Descriptivo de Metales Pesados en Sangre</title>
+<style>
+
+  .hs-pub-container {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+    background-color: #ffffff !important;
+    color: #1e293b !important;
+    padding: 24px;
+    overflow-x: auto;
+    margin: 16px 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    text-align: left;
+    line-height: 1.5;
+  }
+  .hs-pub-container * { box-sizing: border-box; }
+  .hs-pub-container p, .hs-pub-container div, .hs-pub-container span, .hs-pub-container td, .hs-pub-container th, .hs-pub-container li {
+    color: #334155 !important;
+  }
+  .hs-pub-container h1, .hs-pub-container h2, .hs-pub-container h3, .hs-pub-container h4, .hs-pub-container h5 {
+    color: #0f172a !important;
+  }
+  .hs-pub-container strong {
+    color: #0f172a !important;
+    font-weight: 600;
+  }
+  .hs-pub-container em {
+    color: #475569 !important;
+  }
+  .hs-pub-container code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    padding: 2px 7px !important;
+    border-radius: 4px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border: 1px solid #cbd5e1 !important;
+    display: inline-block;
+  }
+  .hs-pub-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 10px 0;
+    font-size: 14px;
+    text-align: left;
+    border-top: 2px solid #0f172a;
+    border-bottom: 2px solid #0f172a;
+    background-color: #ffffff !important;
+  }
+  .hs-pub-table th {
+    font-weight: 600;
+    color: #0f172a !important;
+    padding: 11px 9px;
+    border-bottom: 1px solid #0f172a;
+    background-color: #ffffff !important;
+  }
+  .hs-pub-table td {
+    padding: 9px 8px;
+    color: #334155 !important;
+    border: none;
+    background-color: #ffffff !important;
+    vertical-align: middle;
+  }
+  .hs-pub-table tbody tr:hover td {
+    background-color: #f8fafc !important;
+  }
+  .hs-pub-table tbody tr:not(:last-child) td {
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .hs-pub-group-row td {
+    font-weight: 700;
+    color: #0f172a !important;
+    background-color: #f8fafc !important;
+    border-top: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+    padding-top: 12px;
+    padding-bottom: 6px;
+  }
+  .hs-num-col { text-align: right; }
+  .hs-center-col { text-align: center; }
+  .hs-left-col { text-align: left; }
+  .hs-pub-caption {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    text-align: left;
+    color: #0f172a !important;
+  }
+  .hs-pub-subtitle {
+    font-size: 13px;
+    color: #64748b !important;
+    margin-bottom: 14px;
+    text-align: left;
+  }
+  .hs-section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a !important;
+    margin: 24px 0 8px 0;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  .hs-badge-ok, .hs-badge-success {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 12px;
+    background-color: #dcfce7 !important;
+    color: #15803d !important;
+    border: 1px solid #bbf7d0;
+  }
+  .hs-badge-warn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 12px;
+    background-color: #fef3c7 !important;
+    color: #b45309 !important;
+    border: 1px solid #fde68a;
+  }
+  .hs-badge-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 12px;
+    background-color: #fee2e2 !important;
+    color: #b91c1c !important;
+    border: 1px solid #fecaca;
+  }
+  .hs-badge-cat {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    background-color: #f3e8ff !important;
+    color: #7e22ce !important;
+    border: 1px solid #e9d5ff;
+  }
+  .hs-badge-num {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    background-color: #e0f2fe !important;
+    color: #0369a1 !important;
+    border: 1px solid #bae6fd;
+  }
+  .hs-badge-other {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    border: 1px solid #e2e8f0;
+  }
+  .hs-var-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 2px 3px;
+    padding: 2px 7px;
+    background-color: #f8fafc !important;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #1e293b !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+  .hs-null-badge {
+    color: #b45309 !important;
+    background-color: #fef3c7 !important;
+    border: 1px solid #fde68a;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .hs-count-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 12px;
+    background-color: #f1f5f9 !important;
+    color: #334155 !important;
+    border: 1px solid #e2e8f0;
+  }
+  .hs-dtype-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background-color: #f1f5f9 !important;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f172a !important;
+    border: 1px solid #e2e8f0;
+  }
+  .hs-summary-card-success {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: #ecfdf5 !important;
+    border: 1px solid #a7f3d0;
+    border-radius: 6px;
+    padding: 8px 14px;
+    margin-bottom: 12px;
+    color: #065f46 !important;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .hs-summary-card-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: #fef2f2 !important;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    padding: 8px 14px;
+    margin-bottom: 12px;
+    color: #991b1b !important;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .hs-pub-notes {
+    font-size: 12px;
+    color: #64748b !important;
+    margin-top: 8px;
+    font-style: italic;
+    text-align: left;
+  }
+
+</style>
+</head>
+<body>
+<div class='hs-pub-container'>
+  <div class='hs-pub-caption'>Análisis Descriptivo de Metales Pesados en Sangre</div>
+  <div class='hs-pub-subtitle'>Métricas analíticas, valores de referencia internacional y distribución por percentiles</div>
+  <table class='hs-pub-table'>
+    <thead>
+      <tr>
+        <th colspan='2' class='hs-center-col' style='border-bottom: 1px solid #0f172a;'>Identificación y Muestra</th>
+        <th colspan='2' class='hs-center-col' style='border-bottom: 1px solid #0f172a;'>Criterios Analíticos y Sanitarios</th>
+        <th colspan='2' class='hs-center-col' style='border-bottom: 1px solid #0f172a;'>Concentración Global</th>
+        <th colspan='7' class='hs-center-col' style='border-bottom: 1px solid #0f172a;'>Percentiles de Concentración</th>
+      </tr>
+      <tr>
+        <th class='hs-left-col'>Metal</th>
+        <th class='hs-center-col'>N</th>
+        <th class='hs-center-col'>% Detectable</th>
+        <th class='hs-center-col'>% &gt; Límite</th>
+        <th class='hs-center-col'>Mín - Máx</th>
+        <th class='hs-center-col'>Media Geom. (GSD)</th>
+        <th class='hs-center-col'>p5</th>
+        <th class='hs-center-col'>p10</th>
+        <th class='hs-center-col'>p25</th>
+        <th class='hs-center-col'>p50</th>
+        <th class='hs-center-col'>p75</th>
+        <th class='hs-center-col'>p90</th>
+        <th class='hs-center-col'>p95</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class='hs-left-col'><strong>Concentración de Cadmio en Sangre (&mu;g/L)</strong></td>
+        <td class='hs-center-col'>20</td>
+        <td class='hs-center-col'>100.0%</td>
+        <td class='hs-center-col'>40.0% (1)</td>
+        <td class='hs-center-col'>0.07 - 2.16</td>
+        <td class='hs-center-col'>0.61 (2.89)</td>
+        <td class='hs-center-col'>0.08</td>
+        <td class='hs-center-col'>0.13</td>
+        <td class='hs-center-col'>0.35</td>
+        <td class='hs-center-col'>0.79</td>
+        <td class='hs-center-col'>1.44</td>
+        <td class='hs-center-col'>1.86</td>
+        <td class='hs-center-col'>2.00</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class='hs-pub-notes'>Nota: LOD: Límite de Detección analítico; GSD: Desviación Estándar Geométrica.<br>Nota: % &gt; Límite: Porcentaje de la muestra que iguala o supera el límite permisible de referencia en sangre (CDC/OMS/EPA).</div>
+</div>
+</body>
+</html>

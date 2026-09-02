@@ -1,72 +1,117 @@
+import os
 import pandas as pd
 from typing import Tuple, List, Dict, Any, Optional
-import os
+from heavystats.html_utils import wrap_html_container, format_html_str, BaseReport
 
-class ValidationReport:
+class ValidationReport(BaseReport):
+    """
+    Reporte de control de calidad de datos con renderizado interactivo en HTML de calidad de publicación,
+    texto plano y exportación a DataFrame/CSV/Excel.
+    """
     def __init__(self, checks: List[Dict[str, Any]]):
         self.checks = checks
         self.all_passed = all(check.get('passed', False) for check in checks)
+        self.passed_count = sum(1 for check in checks if check.get('passed', False))
+        self.total_count = len(checks)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """Convierte los resultados en un DataFrame estructurado y limpio."""
+        rows = []
+        for check in self.checks:
+            passed = check.get("passed", False)
+            rows.append({
+                "Estado": "Aprobado" if passed else "Falló",
+                "Criterio": check.get("criterio", ""),
+                "Detalle / Mensaje": str(check.get("message", ""))
+            })
+        return pd.DataFrame(rows)
+
+    def to_csv(self, filepath: str, **kwargs: Any) -> None:
+        """Exporta el reporte de validación a un archivo CSV."""
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        self.to_dataframe().to_csv(filepath, index=kwargs.get("index", False), **kwargs)
+
+    def to_excel(self, filepath: str, sheet_name: str = "Control_Calidad", **kwargs: Any) -> None:
+        """Exporta el reporte de validación a un archivo Excel (.xlsx)."""
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        self.to_dataframe().to_excel(filepath, sheet_name=sheet_name, index=kwargs.get("index", False), **kwargs)
 
     def to_text(self, filepath: Optional[str] = None) -> str:
         """Genera un reporte legible en texto plano."""
         status_header = "[PASÓ]" if self.all_passed else "[FALLÓ]"
         lines = [
-            f"=== REPORTE DE VALIDACIÓN {status_header} ===",
-            f"Estado general: {'Aprobado' if self.all_passed else 'Requiere atención'}",
-            "-" * 50
+            f"=== REPORTE DE CONTROL DE CALIDAD {status_header} ===",
+            f"Estado general: {'Aprobado' if self.all_passed else 'Requiere atención'} ({self.passed_count}/{self.total_count} reglas aprobadas)",
+            "-" * 60
         ]
         
         for check in self.checks:
-            mark = "[OK]" if check["passed"] else "[X] "
-            lines.append(f"{mark} {check['criterio']}: {check['message']}")
+            mark = "[OK]" if check.get("passed", False) else "[X] "
+            lines.append(f"{mark} {check.get('criterio', '')}: {check.get('message', '')}")
             
         report_str = "\n".join(lines)
-        self._write_file(filepath, report_str)
-        return report_str
-
-    def to_markdown(self, filepath: Optional[str] = None) -> str:
-        """Genera un reporte en formato Markdown con tabla de resultados."""
-        badge = "🟢 **VALIDACIÓN EXITOSA**" if self.all_passed else "🔴 **VALIDACIÓN CON FALLOS**"
-        
-        lines = [
-            "# Reporte de Calidad de Datos",
-            f"**Estado General:** {badge}\n",
-            "| Estado | Criterio | Detalle / Mensaje |",
-            "| :---: | :--- | :--- |"
-        ]
-        
-        for check in self.checks:
-            icon = "✅" if check["passed"] else "❌"
-            criterio = check["criterio"]
-            # Escapar pipes en el mensaje para evitar romper la tabla Markdown
-            mensaje = str(check["message"]).replace("|", "\\|")
-            lines.append(f"| {icon} | **{criterio}** | {mensaje} |")
-            
-        report_str = "\n".join(lines)
-        self._write_file(filepath, report_str)
-        return report_str
-
-    def _write_file(self, filepath: Optional[str], content: str) -> None:
         if filepath:
-            dir_path = os.path.dirname(filepath)
-            if dir_path:
-                os.makedirs(dir_path, exist_ok=True)
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(content)
+            self._write_file(filepath, report_str)
+        return report_str
 
-    def to_dataframe(self) -> pd.DataFrame:
-        """Convierte los resultados en un DataFrame."""
-        return pd.DataFrame(self.checks)
+    def to_html(self, filepath: Optional[str] = None, full_page: bool = False) -> str:
+        """
+        Genera una tabla HTML responsiva con calidad de publicación (estilo Booktabs)
+        y tema claro forzado para perfecta legibilidad en fondos oscuros o claros.
+        """
+        lines = []
+        if self.all_passed:
+            lines.append(f"  <div class='hs-summary-card-success'><span>🟢</span> <span>VALIDACIÓN EXITOSA</span> <span style='font-weight:400; color:#047857; margin-left:6px;'>({self.passed_count}/{self.total_count} reglas aprobadas)</span></div>")
+        else:
+            failed_count = self.total_count - self.passed_count
+            lines.append(f"  <div class='hs-summary-card-danger'><span>🔴</span> <span>VALIDACIÓN CON FALLOS</span> <span style='font-weight:400; color:#b91c1c; margin-left:6px;'>({failed_count} de {self.total_count} reglas requieren atención)</span></div>")
 
-    def _repr_markdown_(self) -> str:
-        """Renderizado automático en Markdown para celdas de Jupyter Notebook."""
-        return self.to_markdown()
+        lines.append("  <table class='hs-pub-table'>")
+        lines.append("    <thead>")
+        lines.append("      <tr>")
+        lines.append("        <th class='hs-center-col' style='width: 120px;'>Estado</th>")
+        lines.append("        <th class='hs-left-col' style='width: 220px;'>Criterio</th>")
+        lines.append("        <th class='hs-left-col'>Detalle / Mensaje</th>")
+        lines.append("      </tr>")
+        lines.append("    </thead>")
+        lines.append("    <tbody>")
+
+        for check in self.checks:
+            passed = check.get("passed", False)
+            criterio = format_html_str(check.get("criterio", ""))
+            mensaje = format_html_str(check.get("message", ""))
+            
+            badge_html = "<span class='hs-badge-success'>✓ Correcto</span>" if passed else "<span class='hs-badge-danger'>✕ Falló</span>"
+            crit_html = f"<strong>{criterio}</strong>" if passed else f"<strong style='color:#b91c1c;'>{criterio}</strong>"
+
+            lines.append("      <tr>")
+            lines.append(f"        <td class='hs-center-col'>{badge_html}</td>")
+            lines.append(f"        <td class='hs-left-col'>{crit_html}</td>")
+            lines.append(f"        <td class='hs-left-col'>{mensaje}</td>")
+            lines.append("      </tr>")
+
+        lines.append("    </tbody>")
+        lines.append("  </table>")
+
+        inner_html = "\n".join(lines)
+        html_code = wrap_html_container(
+            inner_html=inner_html,
+            title="Reporte de Calidad de Datos",
+            full_page=full_page
+        )
+        if filepath:
+            self._write_file(filepath, html_code)
+        return html_code
 
     def __str__(self) -> str:
         return self.to_text()
 
     def __repr__(self) -> str:
-        return f"<ValidationReport passed={self.all_passed} total_checks={len(self.checks)}>"
+        return f"<ValidationReport passed={self.all_passed} checks={self.passed_count}/{self.total_count}>"
 
 
 def validate_data(
@@ -175,7 +220,7 @@ def validate_data(
 
         # 7. Valores Imposibles (Límites Físicos y Lógicos)
         impossible_checks = []
-        if not data["Edad"].between(6, 10).all():
+        if not data["Edad"].between(5, 10).all():
             impossible_checks.append("Edad fuera del rango esperado (6-10 años)")
         if not datos_muestra["Peso_kg"].between(5, 150).all():
             impossible_checks.append("Peso fuera del rango esperado (5-150 kg)")

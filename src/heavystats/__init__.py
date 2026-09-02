@@ -1,4 +1,4 @@
-__version__ = "0.1.0"
+__version__ = "0.2.0.dev1"
 
 from heavystats.validation import ValidationReport, validate_data
 from heavystats.comparation import (
@@ -19,6 +19,16 @@ from heavystats.cleaning import (
     desaggregate_multiple_responses,
     encode_dietary_frequencies,
 )
+from heavystats.univariate import (
+    UnivariateTables,
+    UnivariatePlots,
+    DEFAULT_LABELS_MAP,
+    DEFAULT_CUSTOM_PARAMS,
+    DEFAULT_PERMISSIBLE_LIMITS,
+    CDC_BMI_REFERENCE,
+    get_label,
+)
+from heavystats.version_checker import check_for_updates
 
 __all__ = [
     "__version__",
@@ -38,7 +48,22 @@ __all__ = [
     "standardize_boolean_columns",
     "desaggregate_multiple_responses",
     "encode_dietary_frequencies",
+    "UnivariateTables",
+    "UnivariatePlots",
+    "DEFAULT_LABELS_MAP",
+    "DEFAULT_CUSTOM_PARAMS",
+    "DEFAULT_PERMISSIBLE_LIMITS",
+    "CDC_BMI_REFERENCE",
+    "get_label",
+    "check_for_updates",
 ]
+
+# Verificación de versiones no bloqueante en segundo plano al importar
+try:
+    check_for_updates(__version__, async_check=True)
+except Exception:
+    pass
+
 
 def __getattr__(name: str):
     if name == "df":

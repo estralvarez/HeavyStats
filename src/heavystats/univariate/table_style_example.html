@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Tabla con Calidad de Publicación</title>
+    <style>
+        /* Contenedor tipográfico general */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #333333;
+            line-height: 1.5;
+            padding: 20px;
+        }
+
+        /* Estilo principal de la tabla (Tipo Booktabs) */
+        .pub-table {
+            width: 100%;
+            border-collapse: collapse;
+            /* Elimina el doble borde */
+            margin: 20px 0;
+            font-size: 14px;
+            text-align: left;
+            /* Línea superior gruesa clásica de publicación */
+            border-top: 2px solid #111111;
+            /* Línea inferior gruesa */
+            border-bottom: 2px solid #111111;
+        }
+
+        /* Encabezados */
+        .pub-table th {
+            font-weight: 600;
+            color: #111111;
+            padding: 12px 8px;
+            /* Línea delgada debajo del encabezado */
+            border-bottom: 1px solid #111111;
+        }
+
+        /* Celdas de datos */
+        .pub-table td {
+            padding: 10px 8px;
+            color: #444444;
+        }
+
+        /* Filas alternas (Opcional: solo si la tabla es extremadamente larga) */
+        /* .pub-table tbody tr:nth-child(even) { background-color: #f9f9f9; } */
+
+        /* Efecto hover suave para lectura en pantalla */
+        .pub-table tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        /* Alineación específica para datos numéricos */
+        .num-col {
+            text-align: right;
+        }
+
+        /* Título y notas al pie de la tabla */
+        .table-caption {
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-align: left;
+        }
+
+        .table-notes {
+            font-size: 12px;
+            color: #666666;
+            margin-top: 8px;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Título de la tabla -->
+    <div class="table-caption">Tabla 1. Resumen de resultados clínicos por grupo de estudio.</div>
+
+    <!-- Estructura de la Tabla -->
+    <table class="pub-table">
+        <thead>
+            <tr>
+                <th>Grupo de Tratamiento</th>
+                <th class="num-col">Muestra (n)</th>
+                <th class="num-col">Media (días)</th>
+                <th class="num-col">Desviación Estándar</th>
+                <th>Valor p</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Grupo A (Placebo)</td>
+                <td class="num-col">45</td>
+                <td class="num-col">14.2</td>
+                <td class="num-col">1.5</td>
+                <td>&mdash;</td>
+            </tr>
+            <tr>
+                <td>Grupo B (Dosis Baja)</td>
+                <td class="num-col">48</td>
+                <td class="num-col">11.8</td>
+                <td class="num-col">1.2</td>
+                <td>&lt; 0.05</td>
+            </tr>
+            <tr>
+                <td>Grupo C (Dosis Alta)</td>
+                <td class="num-col">47</td>
+                <td class="num-col">9.3</td>
+                <td class="num-col">0.9</td>
+                <td>&lt; 0.01</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Notas al pie de la tabla -->
+    <div class="table-notes">
+        Nota: Los valores p corresponden a la comparación con el grupo placebo mediante la prueba t de Student.
+    </div>
+
+</body>
+
+</html>

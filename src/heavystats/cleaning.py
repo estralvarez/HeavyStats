@@ -2,6 +2,8 @@ import pathlib
 import os
 import pandas as pd
 import numpy as np
+import unicodedata
+import re
 from typing import Tuple, List, Dict, Optional, Any
 
 
@@ -24,7 +26,7 @@ def load_data(csv_path: Optional[Any] = None) -> pd.DataFrame:
         raise FileNotFoundError(f"No se pudo encontrar el archivo CSV en la ruta: {CSV_PATH.resolve()}")
     
     # Cargar usando codificación UTF-8 y forzando Muestra_Codificada a tipo entero nullable (Int64)
-    df = pd.read_csv(CSV_PATH, sep=";", encoding="utf-8", dtype={"Muestra_Codificada": "Int64"})
+    df = pd.read_csv(CSV_PATH, sep=";", decimal=',', encoding="latin1", dtype={"Muestra_Codificada": "Int64"})
     
     # Diccionario de reemplazo de cadenas mis-encodadas (que contienen \ufffd)
     replacements = {
@@ -62,10 +64,14 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__} has no attribute {name}")
 
 
-class VariableTypeReport(dict):
+from heavystats.html_utils import wrap_html_container, format_html_str, BaseReport
+
+
+class VariableTypeReport(dict, BaseReport):
     """
-    Reporte de tipos de variables en formato horizontal (ancho).
-    Hereda de dict y permite exportar a Texto, Markdown, HTML y JSON.
+    Reporte de tipos de variables estructurado.
+    Hereda de dict y permite renderizado HTML interactivo estilo publicación (Booktabs),
+    texto plano y exportación a DataFrame/CSV/Excel.
     """
     def __init__(self, data: pd.DataFrame, grouped_dict: Dict[str, List[str]]):
         super().__init__(grouped_dict)
@@ -73,16 +79,36 @@ class VariableTypeReport(dict):
         self.shape = data.shape
         self._nulls = data.isna().sum().to_dict()
 
-    def _write_file(self, filepath: Optional[str], content: str) -> None:
-        if filepath:
-            dir_path = os.path.dirname(filepath)
-            if dir_path:
-                os.makedirs(dir_path, exist_ok=True)
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(content)
+    def to_dataframe(self) -> pd.DataFrame:
+        """Convierte el reporte a un DataFrame estructurado por variable."""
+        rows = []
+        for dtype, cols in self.items():
+            for col in cols:
+                n_nulls = self._nulls.get(col, 0)
+                rows.append({
+                    "Variable": col,
+                    "Tipo de Dato": str(dtype),
+                    "Nulos": n_nulls,
+                    "Porcentaje Nulos (%)": round((n_nulls / self.shape[0] * 100), 2) if self.shape[0] > 0 else 0.0
+                })
+        return pd.DataFrame(rows)
+
+    def to_csv(self, filepath: str, **kwargs: Any) -> None:
+        """Exporta los datos estructurados a un archivo CSV."""
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        self.to_dataframe().to_csv(filepath, index=kwargs.get("index", False), **kwargs)
+
+    def to_excel(self, filepath: str, sheet_name: str = "Tipos_Variables", **kwargs: Any) -> None:
+        """Exporta los datos estructurados a un archivo Excel (.xlsx)."""
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        self.to_dataframe().to_excel(filepath, sheet_name=sheet_name, index=kwargs.get("index", False), **kwargs)
 
     def to_text(self, filepath: Optional[str] = None) -> str:
-        """Emite el reporte en texto plano estructurado a lo ancho."""
+        """Emite el reporte en texto plano estructurado."""
         lines = [
             "=" * 90,
             f"REPORTE DE TIPOS DE VARIABLES | Dimensiones: {self.shape[0]} filas x {self.shape[1]} columnas",
@@ -102,37 +128,58 @@ class VariableTypeReport(dict):
 
         lines.append("=" * 90)
         report_str = "\n".join(lines)
-        self._write_file(filepath, report_str)
+        if filepath:
+            self._write_file(filepath, report_str)
         return report_str
 
-    def to_markdown(self, filepath: Optional[str] = None) -> str:
-        """Emite el reporte en Markdown con tabla extendida a lo ancho."""
-        lines = [
-            "## Distribución de Variables por Tipo",
-            f"**Dimensiones del Dataset:** `{self.shape[0]}` filas × `{self.shape[1]}` columnas\n",
-            "| Tipo de Dato | N° Columnas | Variables Asignadas |",
-            "| :--- | :---: | :--- |"
-        ]
+    def to_html(self, filepath: Optional[str] = None, full_page: bool = False) -> str:
+        """
+        Genera una tabla HTML responsiva con calidad de publicación (estilo Booktabs)
+        y tema claro forzado para perfecta legibilidad en fondos oscuros o claros.
+        """
+        lines = []
+        lines.append("  <table class='hs-pub-table'>")
+        lines.append("    <thead>")
+        lines.append("      <tr>")
+        lines.append("        <th class='hs-left-col' style='width: 160px;'>Tipo de Dato</th>")
+        lines.append("        <th class='hs-center-col' style='width: 110px;'>N° Columnas</th>")
+        lines.append("        <th class='hs-left-col'>Variables Asignadas</th>")
+        lines.append("      </tr>")
+        lines.append("    </thead>")
+        lines.append("    <tbody>")
 
         for dtype, cols in self.items():
-            formatted_cols = []
+            var_pills = []
             for col in cols:
                 n_nulls = self._nulls.get(col, 0)
+                safe_col = format_html_str(col)
                 if n_nulls > 0:
-                    formatted_cols.append(f"`{col}` *(⚠️ {n_nulls} nulos)*")
+                    var_pills.append(f"<span class='hs-var-pill'>{safe_col} <span class='hs-null-badge'>⚠️ {n_nulls} nulos</span></span>")
                 else:
-                    formatted_cols.append(f"`{col}`")
+                    var_pills.append(f"<span class='hs-var-pill'>{safe_col}</span>")
             
-            vars_cell = ", ".join(formatted_cols).replace("|", "\\|")
-            lines.append(f"| **`{dtype}`** | {len(cols)} | {vars_cell} |")
+            pills_html = "".join(var_pills)
+            safe_dtype = format_html_str(dtype)
+            lines.append("      <tr>")
+            lines.append(f"        <td class='hs-left-col'><span class='hs-dtype-code'>{safe_dtype}</span></td>")
+            lines.append(f"        <td class='hs-center-col'><span class='hs-count-badge'>{len(cols)}</span></td>")
+            lines.append(f"        <td class='hs-left-col'>{pills_html}</td>")
+            lines.append("      </tr>")
 
-        report_str = "\n".join(lines)
-        self._write_file(filepath, report_str)
-        return report_str
+        lines.append("    </tbody>")
+        lines.append("  </table>")
 
-    def _repr_markdown_(self) -> str:
-        """Renderizado automático Markdown en Jupyter Notebooks."""
-        return self.to_markdown()
+        inner_html = "\n".join(lines)
+        html_code = wrap_html_container(
+            inner_html=inner_html,
+            title="Distribución de Variables por Tipo de Dato",
+            subtitle=f"Dimensiones del Dataset: <strong>{self.shape[0]}</strong> filas × <strong>{self.shape[1]}</strong> columnas",
+            full_page=full_page
+        )
+        if filepath:
+            self._write_file(filepath, html_code)
+        return html_code
+
     def __str__(self) -> str:
         return self.to_text()
 
@@ -158,56 +205,92 @@ def numerical_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Devuelve el DataFrame conteniendo únicamente las variables numéricas."""
     return df.select_dtypes(include=[np.number])
 
-class VariablesTableReport:
-    """Reporte de tabla de variables clasificadas en Categóricas o Numéricas."""
+class VariablesTableReport(BaseReport):
+    """
+    Reporte de tabla de variables clasificadas en Categóricas o Numéricas.
+    Permite renderizado HTML interactivo estilo publicación (Booktabs),
+    texto plano y exportación a DataFrame/CSV/Excel.
+    """
     def __init__(self, df: pd.DataFrame, rows: List[Dict[str, Any]]):
         self.df = df
         self.rows = rows
-
-    def _write_file(self, filepath: Optional[str], content: str) -> None:
-        if filepath:
-            dir_path = os.path.dirname(filepath)
-            if dir_path:
-                os.makedirs(dir_path, exist_ok=True)
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(content)
 
     def to_dataframe(self) -> pd.DataFrame:
         """Devuelve la tabla como un pandas DataFrame."""
         return pd.DataFrame(self.rows)
 
+    def to_csv(self, filepath: str, **kwargs: Any) -> None:
+        """Exporta la clasificación a un archivo CSV."""
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        self.to_dataframe().to_csv(filepath, index=kwargs.get("index", False), **kwargs)
+
+    def to_excel(self, filepath: str, sheet_name: str = "Clasificacion_Variables", **kwargs: Any) -> None:
+        """Exporta la clasificación a un libro de Excel (.xlsx)."""
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        self.to_dataframe().to_excel(filepath, sheet_name=sheet_name, index=kwargs.get("index", False), **kwargs)
+
     def to_text(self, filepath: Optional[str] = None) -> str:
         """Devuelve la tabla en texto plano."""
         report_str = self.to_dataframe().to_string(index=False)
-        self._write_file(filepath, report_str)
+        if filepath:
+            self._write_file(filepath, report_str)
         return report_str
 
-    def to_markdown(self, filepath: Optional[str] = None) -> str:
-        """Devuelve la clasificación formateada en una tabla Markdown horizontal."""
+    def to_html(self, filepath: Optional[str] = None, full_page: bool = False) -> str:
+        """
+        Genera una tabla HTML responsiva con calidad de publicación (estilo Booktabs)
+        y tema claro forzado para perfecta legibilidad en fondos oscuros o claros.
+        """
         grouped = {}
         for row in self.rows:
             grouped.setdefault(row["Tipo"], []).append(row["Variable"])
-            
-        lines = [
-            "## Clasificación de Variables",
-            f"**Total de Variables:** `{len(self.rows)}` columnas\n",
-            "| Clasificación | N° Columnas | Variables Asignadas |",
-            "| :--- | :---: | :--- |"
-        ]
-        
+
+        lines = []
+        lines.append("  <table class='hs-pub-table'>")
+        lines.append("    <thead>")
+        lines.append("      <tr>")
+        lines.append("        <th class='hs-left-col' style='width: 160px;'>Clasificación</th>")
+        lines.append("        <th class='hs-center-col' style='width: 110px;'>N° Columnas</th>")
+        lines.append("        <th class='hs-left-col'>Variables Asignadas</th>")
+        lines.append("      </tr>")
+        lines.append("    </thead>")
+        lines.append("    <tbody>")
+
         for tipo in sorted(grouped.keys()):
             cols = grouped[tipo]
-            formatted_cols = [f"`{col}`" for col in cols]
-            vars_cell = ", ".join(formatted_cols)
-            lines.append(f"| **{tipo}** | {len(cols)} | {vars_cell} |")
-            
-        report_str = "\n".join(lines)
-        self._write_file(filepath, report_str)
-        return report_str
+            if str(tipo).lower().startswith("cat"):
+                badge_html = f"<span class='hs-badge-cat'>{tipo}</span>"
+            elif str(tipo).lower().startswith("num"):
+                badge_html = f"<span class='hs-badge-num'>{tipo}</span>"
+            else:
+                badge_html = f"<span class='hs-badge-other'>{tipo}</span>"
 
-    def _repr_markdown_(self) -> str:
-        """Renderizado automático en Markdown para Jupyter Notebook."""
-        return self.to_markdown()
+            var_pills = [f"<span class='hs-var-pill'>{format_html_str(c)}</span>" for c in cols]
+            pills_html = "".join(var_pills)
+
+            lines.append("      <tr>")
+            lines.append(f"        <td class='hs-left-col'>{badge_html}</td>")
+            lines.append(f"        <td class='hs-center-col'><span class='hs-count-badge'>{len(cols)}</span></td>")
+            lines.append(f"        <td class='hs-left-col'>{pills_html}</td>")
+            lines.append("      </tr>")
+
+        lines.append("    </tbody>")
+        lines.append("  </table>")
+
+        inner_html = "\n".join(lines)
+        html_code = wrap_html_container(
+            inner_html=inner_html,
+            title="Clasificación de Variables",
+            subtitle=f"Total de Variables: <strong>{len(self.rows)}</strong> columnas",
+            full_page=full_page
+        )
+        if filepath:
+            self._write_file(filepath, html_code)
+        return html_code
 
     def __str__(self) -> str:
         return self.to_text()
@@ -319,13 +402,59 @@ def standardize_boolean_columns(df: pd.DataFrame, columns: Optional[List[str]] =
     return df_clean
 
 
+def _clean_choice_suffix(col: str, choice: str) -> str:
+    """Simplifica y normaliza la opción para construir un nombre de columna limpio y corto."""
+    def normalize(text: str) -> str:
+        text = text.lower()
+        nfkd_form = unicodedata.normalize('NFKD', text)
+        text = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+        text = re.sub(r'[^a-z0-9_]', '_', text)
+        text = re.sub(r'_+', '_', text)
+        return text.strip('_')
+        
+    col_norm = normalize(col)
+    choice_norm = normalize(choice)
+    
+    col_words = col_norm.split('_')
+    choice_words = choice_norm.split('_')
+    
+    def clean_word(w):
+        if w.endswith('es'):
+            return w[:-2]
+        if w.endswith('s'):
+            return w[:-1]
+        return w
+        
+    col_stems = {clean_word(w) for w in col_words}
+    
+    # Spanish stop words
+    STOP_WORDS = {'de', 'del', 'el', 'la', 'los', 'las', 'un', 'una', 'y', 'o', 'en', 'con', 'a', 'para', 'por'}
+    
+    filtered_words = []
+    for w in choice_words:
+        if clean_word(w) in col_stems or w in col_words:
+            continue
+        if w in STOP_WORDS:
+            continue
+        filtered_words.append(w)
+        
+    if not filtered_words:
+        filtered_words = [w for w in choice_words if w not in STOP_WORDS]
+        if not filtered_words:
+            filtered_words = choice_words
+            
+    return "_".join(filtered_words)
+
+
 def desaggregate_multiple_responses(
     df: pd.DataFrame, 
-    columns: List[str], 
+    columns: Optional[List[str]] = None, 
     separator: str = ";"
 ) -> pd.DataFrame:
     """Desagrega columnas de respuestas múltiples separadas por un delimitador
     en variables binarias individuales (valores 0 o 1, y NaN para valores nulos)."""
+    if columns is None:
+        columns = ["Salud_Transporte", "Salud_Agua", "Exposicion_Talleres", "Exposicion_Lugares", "Exposicion_Industrias", "Salud_Suplementos"]
     df_clean = df.copy()
     for col in columns:
         if col not in df_clean.columns:
@@ -347,7 +476,8 @@ def desaggregate_multiple_responses(
         
         # Crear columnas binarias
         for choice in sorted(valid_choices):
-            new_col_name = f"{col}_{choice.replace(' ', '_')}"
+            suffix = _clean_choice_suffix(col, choice)
+            new_col_name = f"{col}_{suffix}"
             df_clean[new_col_name] = df_clean[col].apply(
                 lambda val: 1 if pd.notna(val) and choice in [c.strip() for c in str(val).split(separator)]
                 else (np.nan if pd.isna(val) else 0)

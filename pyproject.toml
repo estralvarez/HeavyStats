@@ -1,14 +1,16 @@
 [project]
 name = "heavystats"
-version = "0.1.0"
+version = "0.2.0.dev1"
 description = " paquete para análisis de metales pesados en niñas y niños"
 readme = "README.md"
 authors = [{ name = "estralvarez", email = "estralvarez@gmail.com" }]
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
     "numpy>=2.3.5,<2.4.0",
     "pandas>=3.0.5",
     "scipy>=1.18.1",
+    "seaborn>=0.13.2",
+    "matplotlib>=3.10.0",
 ]
 
 [dependency-groups]
