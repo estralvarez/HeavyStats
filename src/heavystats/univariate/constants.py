@@ -33,13 +33,13 @@ DEFAULT_CUSTOM_PARAMS: Dict[str, bool] = {
 
 # Límites permisibles / valores de referencia internacionales de metales en sangre (CDC / OMS / EPA)
 DEFAULT_PERMISSIBLE_LIMITS: Dict[str, float] = {
-    "Plomo_ug_dL": 5.0,      # µg/dL (CDC/OMS nivel de referencia en sangre)
+    "Plomo_ug_dL": 3.5,      # µg/dL (CDC/OMS nivel de referencia en sangre)
     "Mercurio_ug_L": 5.0,    # µg/L (EPA/OMS valor de referencia)
     "Cadmio_ug_L": 1.0,      # µg/L (OMS valor de referencia poblacional)
-    "Plomo": 5.0,
+    "Plomo": 3.5,
     "Mercurio": 5.0,
     "Cadmio": 1.0,
-    "pb": 5.0,
+    "pb": 3.5,
     "hg": 5.0,
     "cd": 1.0,
 }
@@ -47,15 +47,15 @@ DEFAULT_PERMISSIBLE_LIMITS: Dict[str, float] = {
 # Diccionario por defecto para renombrar variables eliminando snake_case y formateando unidades
 DEFAULT_LABELS_MAP: Dict[str, str] = {
     # Metales Pesados
-    "Plomo_ug_dL": r"Concentración de Plomo en Sangre ($\mu$g/dL)",
-    "Mercurio_ug_L": r"Concentración de Mercurio en Sangre ($\mu$g/L)",
-    "Cadmio_ug_L": r"Concentración de Cadmio en Sangre ($\mu$g/L)",
-    "Plomo": r"Plomo ($\mu$g/dL)",
-    "Mercurio": r"Mercurio ($\mu$g/L)",
-    "Cadmio": r"Cadmio ($\mu$g/L)",
-    "pb": r"Plomo ($\mu$g/dL)",
-    "hg": r"Mercurio ($\mu$g/L)",
-    "cd": r"Cadmio ($\mu$g/L)",
+    "Plomo_ug_dL": "Conc. de Plomo en Sangre (µg/dL)",
+    "Mercurio_ug_L": "Conc. de Mercurio en Sangre (µg/L)",
+    "Cadmio_ug_L": "Conc. de Cadmio en Sangre (µg/L)",
+    "Plomo": "Plomo (µg/dL)",
+    "Mercurio": "Mercurio (µg/L)",
+    "Cadmio": "Cadmio (µg/L)",
+    "pb": "Plomo (µg/dL)",
+    "hg": "Mercurio (µg/L)",
+    "cd": "Cadmio (µg/L)",
     # Antropometría y Datos Clínicos
     "Edad": "Edad",
     "Peso_kg": "Peso (kg)",
@@ -137,10 +137,10 @@ def get_label(col: str, labels_map: Optional[Dict[str, str]] = None) -> str:
     # Heurísticas de unidades comunes
     if col.endswith("_ug_dL"):
         metal = col[:-6].replace("_", " ").strip().title()
-        return rf"Concentración de {metal} en Sangre ($\mu$g/dL)"
+        return f"Conc. de {metal} en Sangre (µg/dL)"
     if col.endswith("_ug_L"):
         metal = col[:-5].replace("_", " ").strip().title()
-        return rf"Concentración de {metal} en Sangre ($\mu$g/L)"
+        return f"Conc. de {metal} en Sangre (µg/L)"
     if col.endswith("_kg"):
         var = col[:-3].replace("_", " ").strip().title()
         return f"{var} (kg)"

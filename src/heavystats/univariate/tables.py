@@ -132,6 +132,63 @@ class UnivariateTables:
         if labels_map is not None:
             self.labels_map.update(labels_map)
 
+    def _resolve_column(self, col: str) -> str:
+        """Resuelve el nombre exacto de la columna en el DataFrame a partir de nombres o alias comunes."""
+        if col in self.df.columns:
+            return col
+        col_clean = str(col).strip()
+        if col_clean in self.df.columns:
+            return col_clean
+
+        alias_map = {
+            "plomo": "Plomo_ug_dL",
+            "pb": "Plomo_ug_dL",
+            "lead": "Plomo_ug_dL",
+            "plomo_ug_dl": "Plomo_ug_dL",
+            "mercurio": "Mercurio_ug_L",
+            "hg": "Mercurio_ug_L",
+            "mercury": "Mercurio_ug_L",
+            "mercurio_ug_l": "Mercurio_ug_L",
+            "cadmio": "Cadmio_ug_L",
+            "cd": "Cadmio_ug_L",
+            "cadmium": "Cadmio_ug_L",
+            "cadmio_ug_l": "Cadmio_ug_L",
+            "edad": "Edad",
+            "age": "Edad",
+            "peso": "Peso_kg",
+            "peso_kg": "Peso_kg",
+            "weight": "Peso_kg",
+            "altura": "Altura_cm",
+            "talla": "Altura_cm",
+            "altura_cm": "Altura_cm",
+            "height": "Altura_cm",
+            "score": "Score_Riesgo",
+            "score_riesgo": "Score_Riesgo",
+            "riesgo": "Score_Riesgo",
+            "sexo": "Sexo",
+            "gender": "Sexo",
+            "sector": "Sector",
+            "es_expuesto": "Es_Expuesto",
+            "exposicion": "Es_Expuesto"
+        }
+        col_lower = col_clean.lower()
+        if col_lower in alias_map and alias_map[col_lower] in self.df.columns:
+            return alias_map[col_lower]
+
+        for c in self.df.columns:
+            if c.lower() == col_lower:
+                return c
+
+        return col
+
+    def _normalize_columns(self, columns: Union[str, Sequence[str]]) -> List[str]:
+        """Normaliza y resuelve el argumento de columnas para admitir un string único, secuencias o alias."""
+        if isinstance(columns, str):
+            cols = [columns]
+        else:
+            cols = list(columns)
+        return [self._resolve_column(c) for c in cols]
+
     def get_label(self, col: str, labels_map: Optional[Dict[str, str]] = None) -> str:
         """
         Obtiene la etiqueta legible para una columna, eliminando snake_case.
@@ -360,31 +417,32 @@ class UnivariateTables:
 
     def numerical_summary(
         self, 
-        columns: Optional[List[str]] = None, 
-        skewed_columns: Optional[List[str]] = None,
+        columns: Optional[Union[str, Sequence[str]]] = None, 
+        skewed_columns: Optional[Union[str, Sequence[str]]] = None,
         iqr_format: str = "range",
-        normality_criterion: str = "shapiro",
+        normality_criterion: str = "composite",
         labels_map: Optional[Dict[str, str]] = None,
         filepath: Optional[str] = None
     ) -> UnivariateTableReport:
         """
         Calcula estadísticas descriptivas para variables numéricas.
         Reporta Media (DE) para variables aproximadamente simétricas y Mediana [Q1 - Q3] para variables sesgadas.
-        También calcula valores mín-máx, asimetría, curtosis y la prueba de Shapiro-Wilk.
+        También calcula valores mín-máx, asimetría, curtosis y las pruebas de Shapiro-Wilk y Anderson-Darling.
 
         Parámetros
         ----------
-        columns : List[str], opcional
-            Lista de columnas numéricas (por defecto: Edad, Peso_kg, Altura_cm, Score_Riesgo).
-        skewed_columns : List[str], opcional
+        columns : Union[str, Sequence[str]], opcional
+            Lista de columnas numéricas (por defecto: Edad, Peso_kg, Altura_cm, Score_Riesgo). Admite alias.
+        skewed_columns : Union[str, Sequence[str]], opcional
             Lista explícita de columnas a tratar como sesgadas.
         iqr_format : str, opcional (por defecto "range")
             Formato del rango intercuartílico: "range" -> [Q1 - Q3] o "width" -> [RIQ].
-        normality_criterion : str, opcional (por defecto "shapiro")
+        normality_criterion : str, opcional (por defecto "composite")
             Criterio para clasificar la distribución:
+            - "composite" o "both": Si Shapiro-Wilk p < 0.05, Anderson-Darling rechaza al 5% (A² > 0.721) o |Asimetría| > 0.5.
+            - "anderson": Anderson-Darling rechaza al nivel del 5% (A² > 0.721).
             - "shapiro": Shapiro-Wilk p < 0.05 indica distribución sesgada.
             - "skewness": |Asimetría| > 0.5 indica distribución sesgada.
-            - "both": Si p < 0.05 o |Asimetría| > 0.5.
             - "manual": Solo las especificadas en skewed_columns.
         labels_map : Dict[str, str], opcional
             Mapeo de nombres legibles para los encabezados.
@@ -397,13 +455,17 @@ class UnivariateTables:
             Reporte con DataFrame, renderizado interactivo en HTML y exportación a Excel/CSV.
         """
         if columns is None:
-            columns = ["Edad", "Peso_kg", "Altura_cm", "Score_Riesgo"]
+            resolved_cols = ["Edad", "Peso_kg", "Altura_cm", "Score_Riesgo"]
+        else:
+            resolved_cols = self._normalize_columns(columns)
 
         if skewed_columns is None:
-            skewed_columns = []
+            skewed_cols_set = set()
+        else:
+            skewed_cols_set = set(self._normalize_columns(skewed_columns))
 
         records = []
-        for col in columns:
+        for col in resolved_cols:
             if col not in self.df.columns:
                 continue
 
@@ -429,6 +491,7 @@ class UnivariateTables:
             skew = float(stats.skew(data_clean))
             kurt = float(stats.kurtosis(data_clean))
 
+            # Prueba de Shapiro-Wilk
             if n_valid >= 3:
                 shapiro_w, shapiro_p = stats.shapiro(data_clean)
                 shapiro_str = f"{shapiro_p:.4f}"
@@ -437,15 +500,37 @@ class UnivariateTables:
                 shapiro_str = "N/A"
                 p_val = 1.0
 
-            # Evaluación de normalidad
-            if normality_criterion == "shapiro":
-                is_skewed = (col in skewed_columns) or (p_val < 0.05)
+            # Prueba de Anderson-Darling (robusta para colas, discretizaciones y empates)
+            ad_stat = None
+            ad_reject = False
+            ad_str = "N/A"
+            if n_valid >= 5:
+                try:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=FutureWarning)
+                        ad_res = stats.anderson(data_clean, dist="norm")
+                    ad_stat = float(ad_res.statistic)
+                    if 5.0 in ad_res.significance_level:
+                        idx_5 = list(ad_res.significance_level).index(5.0)
+                        cv_5 = float(ad_res.critical_values[idx_5])
+                    else:
+                        cv_5 = 0.721
+                    ad_reject = bool(ad_stat > cv_5)
+                    ad_str = f"{ad_stat:.3f}*" if ad_reject else f"{ad_stat:.3f}"
+                except Exception:
+                    ad_str = "N/A"
+
+            # Evaluación de normalidad según el criterio seleccionado
+            if normality_criterion in ["composite", "both", "any"]:
+                is_skewed = (col in skewed_cols_set) or (p_val < 0.05) or ad_reject or (abs(skew) > 1.0)
+            elif normality_criterion == "anderson":
+                is_skewed = (col in skewed_cols_set) or ad_reject
+            elif normality_criterion == "shapiro":
+                is_skewed = (col in skewed_cols_set) or (p_val < 0.05)
             elif normality_criterion == "skewness":
-                is_skewed = (col in skewed_columns) or (abs(skew) > 0.5)
-            elif normality_criterion == "both":
-                is_skewed = (col in skewed_columns) or (p_val < 0.05) or (abs(skew) > 0.5)
+                is_skewed = (col in skewed_cols_set) or (abs(skew) > 0.5)
             else:  # manual
-                is_skewed = col in skewed_columns
+                is_skewed = col in skewed_cols_set
 
             dist_type = "Sesgada" if is_skewed else "Simétrica"
 
@@ -475,14 +560,15 @@ class UnivariateTables:
                 "Mín - Máx": f"{val_min:.2f} - {val_max:.2f}",
                 "Asimetría": f"{skew:+.3f}",
                 "Curtosis": f"{kurt:+.3f}",
-                "Shapiro-Wilk (p-val)": shapiro_str
+                "Shapiro-Wilk (p-val)": shapiro_str,
+                "Anderson-Darling (A²)": ad_str
             })
 
         res_df = pd.DataFrame(records)
 
         notes = [
             "DE: Desviación Estándar; RIQ: Rango Intercuartílico [Q1 - Q3]",
-            "En negrita se resalta la medida de tendencia central recomendada según la simetría y la prueba de Shapiro-Wilk (p < 0.05 indica distribución sesgada/no paramétrica)."
+            "En negrita se resalta la medida de tendencia central recomendada según la simetría y las pruebas de Shapiro-Wilk (p < 0.05) y Anderson-Darling (* indica A² > 0.721, p < 0.05)."
         ]
 
         report = UnivariateTableReport(
@@ -501,14 +587,15 @@ class UnivariateTables:
                 "Mín - Máx": "c",
                 "Asimetría": "c",
                 "Curtosis": "c",
-                "Shapiro-Wilk (p-val)": "c"
+                "Shapiro-Wilk (p-val)": "c",
+                "Anderson-Darling (A²)": "c"
             }
         )
         return report
 
     def metal_summary(
         self, 
-        columns: Optional[List[str]] = None, 
+        columns: Optional[Union[str, Sequence[str]]] = None, 
         lods: Optional[Dict[str, float]] = None,
         permissible_limits: Optional[Dict[str, float]] = None,
         percentiles: Optional[List[int]] = None,
@@ -522,8 +609,9 @@ class UnivariateTables:
 
         Parámetros
         ----------
-        columns : List[str], opcional
-            Metales a analizar (por defecto: Plomo_ug_dL, Mercurio_ug_L, Cadmio_ug_L).
+        columns : Union[str, Sequence[str]], opcional
+            Metal individual o lista de metales a analizar (por defecto: Plomo_ug_dL, Mercurio_ug_L, Cadmio_ug_L).
+            Admite nombres de columnas o alias ("Plomo", "Mercurio", "Cadmio", "pb", "hg", "cd").
         lods : Dict[str, float], opcional
             Límites de detección de los instrumentos analíticos.
         permissible_limits : Dict[str, float], opcional
@@ -531,7 +619,7 @@ class UnivariateTables:
         percentiles : List[int], opcional
             Percentiles a reportar (por defecto: 5, 10, 25, 50, 75, 90, 95).
         labels_map : Dict[str, str], opcional
-            Mapeo de nombres legibles para los ejes y tablas.
+            Mapeo de nombres legibles para los encabezados.
         filepath : str, opcional
             Ruta de archivo para guardar el reporte en HTML (.html).
 
@@ -541,7 +629,9 @@ class UnivariateTables:
             Reporte con DataFrame, renderizado interactivo en HTML y exportación a Excel/CSV.
         """
         if columns is None:
-            columns = ["Plomo_ug_dL", "Mercurio_ug_L", "Cadmio_ug_L"]
+            resolved_cols = ["Plomo_ug_dL", "Mercurio_ug_L", "Cadmio_ug_L"]
+        else:
+            resolved_cols = self._normalize_columns(columns)
 
         if lods is None:
             lods = {
@@ -550,7 +640,10 @@ class UnivariateTables:
                 "Cadmio_ug_L": 0.05,
                 "Plomo": 0.1,
                 "Mercurio": 0.1,
-                "Cadmio": 0.05
+                "Cadmio": 0.05,
+                "pb": 0.1,
+                "hg": 0.1,
+                "cd": 0.05
             }
 
         active_limits = DEFAULT_PERMISSIBLE_LIMITS.copy()
@@ -560,8 +653,12 @@ class UnivariateTables:
         if percentiles is None:
             percentiles = [5, 10, 25, 50, 75, 90, 95]
 
+        # Mapeo de percentiles a subíndices Unicode
+        subscript_map = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+        perc_col_names = [f"P{str(p).translate(subscript_map)}" for p in percentiles]
+
         records = []
-        for col in columns:
+        for col in resolved_cols:
             if col not in self.df.columns:
                 continue
 
@@ -574,29 +671,28 @@ class UnivariateTables:
             detectable_count = int((data_clean >= lod).sum())
             pct_detectable = (detectable_count / n) * 100 if n > 0 else 0.0
 
-            # Porcentaje que supera el límite permisible
+            # Porcentaje que supera el límite permisible (con valor límite en negrita entre paréntesis)
             limit_val = active_limits.get(col)
             if limit_val is not None:
                 exceed_count = int((data_clean >= limit_val).sum())
                 pct_exceed = (exceed_count / n) * 100 if n > 0 else 0.0
-                exceed_str = f"{pct_exceed:.1f}% ({limit_val:g})"
+                exceed_str = f"{pct_exceed:.1f}% **({limit_val:g})**"
             else:
                 exceed_str = "N/D"
 
             val_min = float(data_clean.min())
             val_max = float(data_clean.max())
 
-            # Media geométrica y desviación estándar geométrica (GSD)
+            # Media geométrica y desviación estándar geométrica (GSD en negrita entre paréntesis)
             if (data_clean > 0).all():
                 log_vals = np.log(data_clean)
                 geo_mean = float(np.exp(log_vals.mean()))
                 gsd = float(np.exp(log_vals.std()))
-                geo_mean_str = f"{geo_mean:.2f} ({gsd:.2f})"
+                geo_mean_str = f"{geo_mean:.2f} **({gsd:.2f})**"
             else:
                 geo_mean_str = "No calc."
 
             perc_vals = np.percentile(data_clean, percentiles)
-
             var_label = self.get_label(col, labels_map)
 
             row_dict = {
@@ -608,34 +704,33 @@ class UnivariateTables:
                 "Media Geom. (GSD)": geo_mean_str
             }
 
-            for p, val in zip(percentiles, perc_vals):
-                row_dict[f"p{p}"] = f"{val:.2f}"
+            for p_name, val in zip(perc_col_names, perc_vals):
+                row_dict[p_name] = f"{val:.2f}"
 
             records.append(row_dict)
 
         res_df = pd.DataFrame(records)
 
-        # Spanners de columnas para LaTeX
-        perc_cols = [f"p{p}" for p in percentiles]
         spanners = [
             {"label": "Identificación y Muestra", "columns": ["Metal", "N"]},
             {"label": "Criterios Analíticos y Sanitarios", "columns": ["% Detectable", "% > Límite"]},
-            {"label": "Concentración Global", "columns": ["Mín - Máx", "Media Geom. (GSD)"]},
-            {"label": "Percentiles de Concentración", "columns": perc_cols}
+            {"label": "Conc. Global", "columns": ["Mín - Máx", "Media Geom. (GSD)"]},
+            {"label": "Percentiles de Conc.", "columns": perc_col_names}
         ]
 
         notes = [
-            "LOD: Límite de Detección analítico; GSD: Desviación Estándar Geométrica.",
-            "% > Límite: Porcentaje de la muestra que iguala o supera el límite permisible de referencia en sangre (CDC/OMS/EPA)."
+            "LOD: Límite de Detección analítico (≥ LOD); GSD: Desviación Estándar Geométrica.",
+            "% > Límite: Porcentaje de la muestra que iguala o supera el valor de referencia en sangre (CDC/OMS/EPA). Entre paréntesis en negrita se indica el valor límite (µg/dL para Pb, µg/L para Hg y Cd).",
+            "Media Geom. (GSD): Media geométrica con su desviación estándar geométrica (factor multiplicativo) entre paréntesis en negrita."
         ]
 
         report = UnivariateTableReport(
             df=res_df,
             title="Análisis Descriptivo de Metales Pesados en Sangre",
-            subtitle="Métricas analíticas, valores de referencia internacional y distribución por percentiles",
+            subtitle="Métricas analíticas, valores de referencia internacional y distribución percentilar",
             notes=notes,
             filepath=filepath,
-            cols=columns,
+            cols=resolved_cols,
             column_alignments={c: "l" if c == "Metal" else "c" for c in res_df.columns},
             spanners=spanners
         )
@@ -643,7 +738,7 @@ class UnivariateTables:
 
     def log_transform_evaluation(
         self, 
-        columns: Optional[List[str]] = None, 
+        columns: Optional[Union[str, Sequence[str]]] = None, 
         labels_map: Optional[Dict[str, str]] = None,
         filepath: Optional[str] = None
     ) -> UnivariateTableReport:
@@ -654,8 +749,8 @@ class UnivariateTables:
 
         Parámetros
         ----------
-        columns : List[str], opcional
-            Metales a evaluar.
+        columns : Union[str, Sequence[str]], opcional
+            Metales a evaluar. Admite alias.
         labels_map : Dict[str, str], opcional
             Mapeo de nombres de variables.
         filepath : str, opcional
@@ -667,10 +762,12 @@ class UnivariateTables:
             Reporte con DataFrame, renderizado interactivo en HTML y exportación a Excel/CSV.
         """
         if columns is None:
-            columns = ["Plomo_ug_dL", "Mercurio_ug_L", "Cadmio_ug_L"]
+            resolved_cols = ["Plomo_ug_dL", "Mercurio_ug_L", "Cadmio_ug_L"]
+        else:
+            resolved_cols = self._normalize_columns(columns)
 
         records = []
-        for col in columns:
+        for col in resolved_cols:
             if col not in self.df.columns:
                 continue
 

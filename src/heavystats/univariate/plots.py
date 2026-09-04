@@ -56,19 +56,70 @@ class UnivariatePlots:
     # Métodos Auxiliares Privados (DRY)
     # =========================================================================
 
-    @staticmethod
-    def _normalize_columns(columns: Union[str, Sequence[str]]) -> List[str]:
-        """Normaliza el argumento de columnas para admitir un string único o secuencias."""
+    def _resolve_column(self, col: str) -> str:
+        """Resuelve el nombre exacto de la columna en el DataFrame a partir de nombres o alias comunes."""
+        if col in self.df.columns:
+            return col
+        col_clean = str(col).strip()
+        if col_clean in self.df.columns:
+            return col_clean
+
+        alias_map = {
+            "plomo": "Plomo_ug_dL",
+            "pb": "Plomo_ug_dL",
+            "lead": "Plomo_ug_dL",
+            "plomo_ug_dl": "Plomo_ug_dL",
+            "mercurio": "Mercurio_ug_L",
+            "hg": "Mercurio_ug_L",
+            "mercury": "Mercurio_ug_L",
+            "mercurio_ug_l": "Mercurio_ug_L",
+            "cadmio": "Cadmio_ug_L",
+            "cd": "Cadmio_ug_L",
+            "cadmium": "Cadmio_ug_L",
+            "cadmio_ug_l": "Cadmio_ug_L",
+            "edad": "Edad",
+            "age": "Edad",
+            "peso": "Peso_kg",
+            "peso_kg": "Peso_kg",
+            "weight": "Peso_kg",
+            "altura": "Altura_cm",
+            "talla": "Altura_cm",
+            "altura_cm": "Altura_cm",
+            "height": "Altura_cm",
+            "score": "Score_Riesgo",
+            "score_riesgo": "Score_Riesgo",
+            "riesgo": "Score_Riesgo",
+            "sexo": "Sexo",
+            "gender": "Sexo",
+            "sector": "Sector",
+            "es_expuesto": "Es_Expuesto",
+            "exposicion": "Es_Expuesto"
+        }
+        col_lower = col_clean.lower()
+        if col_lower in alias_map and alias_map[col_lower] in self.df.columns:
+            return alias_map[col_lower]
+
+        for c in self.df.columns:
+            if c.lower() == col_lower:
+                return c
+
+        return col
+
+    def _normalize_columns(self, columns: Union[str, Sequence[str]]) -> List[str]:
+        """Normaliza y resuelve el argumento de columnas para admitir un string único, secuencias o alias."""
         if isinstance(columns, str):
-            return [columns]
-        return list(columns)
+            cols = [columns]
+        else:
+            cols = list(columns)
+        return [self._resolve_column(c) for c in cols]
 
     def _clean_series(self, col: str, min_obs: int = 1) -> Optional[pd.Series]:
         """
         Extrae y limpia una columna numérica del DataFrame, convirtiendo a tipo numérico
         y descartando valores nulos. Emite advertencias explícitas en caso de datos faltantes.
         """
-        if col not in self.df.columns:
+        real_col = self._resolve_column(col)
+        if real_col not in self.df.columns:
             warnings.warn(
                 f"La columna '{col}' no se encuentra en el DataFrame. Omitiendo gráfico.",
                 UserWarning,
@@ -76,7 +127,7 @@ class UnivariatePlots:
             )
             return None
 
-        data_clean = pd.to_numeric(self.df[col], errors="coerce").dropna()
+        data_clean = pd.to_numeric(self.df[real_col], errors="coerce").dropna()
         if len(data_clean) < min_obs:
             warnings.warn(
                 f"La columna '{col}' contiene menos de {min_obs} observaciones válidas. Omitiendo gráfico.",
@@ -97,11 +148,16 @@ class UnivariatePlots:
         if permissible_limit is not None:
             return permissible_limit
 
+        real_col = self._resolve_column(col)
         active_limits = DEFAULT_PERMISSIBLE_LIMITS.copy()
         if permissible_limits is not None:
             active_limits.update(permissible_limits)
 
-        return active_limits.get(col)
+        if real_col in active_limits:
+            return active_limits[real_col]
+        if col in active_limits:
+            return active_limits[col]
+        return active_limits.get(col.lower())
 
     @staticmethod
     def _style_axis(
