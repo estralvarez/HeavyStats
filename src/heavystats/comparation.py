@@ -257,30 +257,35 @@ class ComparationReport(BaseReport):
 
         # 3. Variabilidad
         lines.append(f"  <div class='hs-section-title'>3. Exploración de Variabilidad de Riesgo en el Grupo Seleccionado (n={self.n_selected})</div>")
-        lines.append("  <div style='font-size:13px; color:#475569 !important; margin-bottom:8px;'>Para realizar regresiones estadísticas o contrastes diagnósticos de manera robusta, los predictores (variables de riesgo de metales) no deben ser constantes en la muestra analítica.</div>")
+        lines.append("  <div style='font-size:13.5px; color:#475569 !important; margin-bottom:12px; line-height:1.6;'>Para realizar regresiones estadísticas o contrastes diagnósticos de manera robusta, los predictores (variables de riesgo de metales) no deben ser constantes en la muestra analítica.</div>")
         lines.append("  <table class='hs-pub-table'>")
         lines.append("    <thead>")
         lines.append("      <tr>")
-        lines.append("        <th class='hs-left-col' style='width: 170px;'>Variable de Riesgo</th>")
-        lines.append("        <th class='hs-center-col' style='width: 120px;'>Cantidad de 'SI'</th>")
-        lines.append("        <th class='hs-center-col' style='width: 120px;'>Cantidad de 'NO'</th>")
-        lines.append("        <th class='hs-center-col' style='width: 150px;'>¿Tiene Variabilidad?</th>")
-        lines.append("        <th class='hs-left-col'>Estado / Alerta en Muestra</th>")
+        lines.append("        <th class='hs-left-col' style='width: 180px;'>Variable de Riesgo</th>")
+        lines.append("        <th class='hs-center-col' style='width: 120px;'>Cantidad SI</th>")
+        lines.append("        <th class='hs-center-col' style='width: 120px;'>Cantidad NO</th>")
+        lines.append("        <th class='hs-center-col' style='width: 140px;'>¿Variabilidad?</th>")
+        lines.append("        <th class='hs-center-col' style='width: 180px;'>Estado en Muestra</th>")
         lines.append("      </tr>")
         lines.append("    </thead>")
         lines.append("    <tbody>")
+        risk_notes = []
         for res in self.risk_results:
             si_c = res['si_cnt']
             no_c = res['no_cnt']
             has_v = res['has_variability']
 
             if not has_v:
-                badge_status = f"<span class='hs-badge-danger'>🔴 Sin variabilidad</span> <span style='font-size:12px; color:#b91c1c !important; margin-left:6px;'>(Constante: todos los registros son '{'SI' if si_c > 0 else 'NO'}'). No se puede utilizar en regresiones.</span>"
+                badge_status = "<span class='hs-badge-danger'>🔴 Sin variabilidad</span>"
+                risk_notes.append(f"<code>{res['variable']}</code>: Constante (todos los registros son '{'SI' if si_c > 0 else 'NO'}'). No se puede utilizar en regresiones.")
             elif si_c < 5 or no_c < 5:
                 min_obs = min(si_c, no_c)
-                badge_status = f"<span class='hs-badge-warn'>⚠️ Baja variabilidad</span> <span style='font-size:12px; color:#475569 !important; margin-left:6px;'>(sólo {min_obs} observaciones en una categoría). Puede causar problemas de convergencia en modelos logísticos.</span>"
+                min_cat = 'NO' if no_c <= si_c else 'SI'
+                badge_status = "<span class='hs-badge-warn'>⚠️ Baja variabilidad</span>"
+                risk_notes.append(f"<code>{res['variable']}</code>: Sólo {min_obs} observaciones en categoría {min_cat}. Puede causar inestabilidad en regresiones logísticas.")
             else:
                 badge_status = "<span class='hs-badge-ok'>🟢 Variabilidad adecuada</span>"
+                risk_notes.append(f"<code>{res['variable']}</code>: Distribución equilibrada en la muestra analítica ({si_c} SI / {no_c} NO).")
 
             has_var_badge = "<span class='hs-badge-ok'>Sí</span>" if has_v else "<span class='hs-badge-danger'>No</span>"
             lines.append("      <tr>")
@@ -288,14 +293,29 @@ class ComparationReport(BaseReport):
             lines.append(f"        <td class='hs-center-col'><strong>{si_c}</strong></td>")
             lines.append(f"        <td class='hs-center-col'><strong>{no_c}</strong></td>")
             lines.append(f"        <td class='hs-center-col'>{has_var_badge}</td>")
-            lines.append(f"        <td class='hs-left-col'>{badge_status}</td>")
+            lines.append(f"        <td class='hs-center-col'>{badge_status}</td>")
             lines.append("      </tr>")
         lines.append("    </tbody>")
         lines.append("  </table>")
+        if risk_notes:
+            lines.append("  <div class='hs-pub-notes' style='margin-top: 14px; line-height: 1.7;'>")
+            lines.append("    <div style='font-weight: 600; color: #0f172a !important; margin-bottom: 6px; font-style: normal;'>Notas de Diagnóstico y Variabilidad:</div>")
+            lines.append("    <ul style='margin: 0; padding-left: 1.25rem; font-style: normal; color: #475569 !important; display: flex; flex-direction: column; gap: 6px;'>")
+            for note in risk_notes:
+                lines.append(f"      <li>{note}</li>")
+            lines.append("    </ul>")
+            lines.append("  </div>")
 
         # 4. Diagnóstico de Sesgo
         lines.append("  <div class='hs-section-title'>4. Diagnóstico de Sesgo de Selección</div>")
-        lines.append("  <div style='font-size:13px; color:#475569 !important; margin-bottom:8px;'>El sesgo de selección se evalúa examinando si hay desequilibrios significativos entre el grupo seleccionado y el no seleccionado:<br>&bull; <code>|SMD| &gt; 0.10</code> indica desequilibrio leve.<br>&bull; <code>|SMD| &gt; 0.25</code> indica desequilibrio importante (posible sesgo).</div>")
+        lines.append("  <div class='hs-smd-explanation'>")
+        lines.append("    <p class='hs-smd-intro'>La Diferencia Media Estandarizada (SMD) evalúa el desbalance independiente del tamaño muestral:</p>")
+        lines.append("    <ul class='hs-smd-list'>")
+        lines.append("      <li><code>|SMD| &le; 0.10</code>: Equilibrio óptimo (sin sesgo relevante).</li>")
+        lines.append("      <li><code>0.10 &lt; |SMD| &le; 0.25</code>: Desequilibrio leve.</li>")
+        lines.append("      <li><code>|SMD| &gt; 0.25</code>: <strong>Desequilibrio sustancial / Sesgo de selección</strong>.</li>")
+        lines.append("    </ul>")
+        lines.append("  </div>")
         
         if not self.bias_vars:
             lines.append("  <div style='margin-top:10px;'><span class='hs-badge-ok'>🟢 No se detectó evidencia de sesgo de selección</span> <span style='font-size:13px; color:#475569 !important; margin-left:6px;'>El grupo seleccionado y el no seleccionado son comparables en todas las covariables registradas (todas las |SMD| &le; 0.10).</span></div>")
@@ -303,7 +323,7 @@ class ComparationReport(BaseReport):
             lines.append("  <table class='hs-pub-table'>")
             lines.append("    <thead>")
             lines.append("      <tr>")
-            lines.append("        <th class='hs-left-col' style='width: 200px;'>Variable</th>")
+            lines.append("        <th class='hs-left-col' style='width: 200px;'>Variable Evaluada</th>")
             lines.append("        <th class='hs-center-col' style='width: 140px;'>SMD Máximo</th>")
             lines.append("        <th class='hs-left-col'>Nivel de Desequilibrio</th>")
             lines.append("      </tr>")
@@ -311,9 +331,9 @@ class ComparationReport(BaseReport):
             lines.append("    <tbody>")
             for var, val in sorted(self.bias_vars, key=lambda x: x[1], reverse=True):
                 if val > 0.25:
-                    nivel_badge = "<span class='hs-badge-danger'>Importante (&gt; 0.25)</span>"
+                    nivel_badge = "<span class='hs-badge-danger'>Desequilibrio Importante (> 0.25)</span>"
                 else:
-                    nivel_badge = "<span class='hs-badge-warn'>Leve (&gt; 0.10)</span>"
+                    nivel_badge = "<span class='hs-badge-warn'>Desequilibrio Leve (> 0.10)</span>"
                 lines.append("      <tr>")
                 lines.append(f"        <td class='hs-left-col'><code>{var}</code></td>")
                 lines.append(f"        <td class='hs-center-col'><strong>{val:.3f}</strong></td>")
@@ -321,12 +341,13 @@ class ComparationReport(BaseReport):
                 lines.append("      </tr>")
             lines.append("    </tbody>")
             lines.append("  </table>")
+            lines.append("  <div class='hs-pub-notes'>Recomendación: Las variables con desequilibrio sustancial (|SMD| &gt; 0.25) deben incluirse como covariables de ajuste obligatorio en modelos multivariantes posteriores.</div>")
 
         inner_html = "\n".join(lines)
         html_code = wrap_html_container(
             inner_html=inner_html,
             title="Reporte de Comparación: Seleccionados vs No Seleccionados",
-            subtitle=f"Población Total: <strong>N={self.n_total}</strong> | Seleccionados (Muestra): <strong>n={self.n_selected}</strong> | No Seleccionados: <strong>n={self.n_non_selected}</strong>",
+            subtitle=f"Población Total: **N={self.n_total}** | Seleccionados (Muestra): **n={self.n_selected}** | No Seleccionados: **n={self.n_non_selected}**",
             full_page=full_page
         )
         if filepath:
@@ -412,8 +433,8 @@ def compare_groups(
                     else:
                         _, p_val_global, _, expected = stats.chi2_contingency(contingency)
                         if (expected < 5).any():
-                            warn_flag = " ($\\chi^2$, ⚠️ celdas < 5)"
-                            html_flag = " <span style='font-size:11px; color:#b45309 !important;'>(&chi;², ⚠️ celdas &lt; 5)</span>"
+                            warn_flag = " ($\\chi^2$, celdas < 5)"
+                            html_flag = " <span style='font-size:11px; color:#64748b !important;'>(&chi;²)</span> <span class='hs-null-badge'>celdas &lt; 5</span>"
                         else:
                             warn_flag = " ($\\chi^2$)"
                             html_flag = " <span style='font-size:11px; color:#64748b !important;'>(&chi;²)</span>"

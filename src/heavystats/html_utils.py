@@ -193,13 +193,16 @@ def get_publication_css() -> str:
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
   .hs-null-badge {
+    display: inline-block !important;
+    white-space: nowrap !important;
     color: #b45309 !important;
     background-color: #fef3c7 !important;
     border: 1px solid #fde68a;
-    padding: 0 4px;
-    border-radius: 3px;
-    font-size: 10px;
+    padding: 1px 6px !important;
+    border-radius: 4px;
+    font-size: 11px !important;
     font-weight: 700;
+    vertical-align: middle;
   }
   .hs-count-badge {
     display: inline-block;
@@ -261,6 +264,7 @@ def format_html_str(text: Any) -> str:
     r"""
     Formatea cadenas de texto para renderizado HTML de calidad de publicación:
     - Escapa caracteres HTML (<, >) para evitar tags rotos.
+    - Restaura etiquetas HTML seguras (strong, em, code, span, b, i, br, sub, sup).
     - Convierte fórmulas y símbolos matemáticos ($\mu$, \mu, \chi^2, >=, <=) a entidades HTML.
     - Convierte **negrita** a <strong> y *cursiva* a <em>.
     """
@@ -285,10 +289,20 @@ def format_html_str(text: Any) -> str:
     s = s.replace("&lt;=", "&le;")
     s = s.replace("$", "")
 
-    # Marcado a etiquetas HTML
+    # Marcado Markdown a etiquetas HTML
     s = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", s)
     s = re.sub(r"\*(.*?)\*", r"<em>\1</em>", s)
     s = re.sub(r"`(.*?)`", r"<code>\1</code>", s)
+
+    # Restauración de etiquetas HTML seguras
+    safe_simple_tags = ["strong", "em", "code", "b", "i", "br", "sub", "sup"]
+    for tag in safe_simple_tags:
+        s = re.sub(rf"&lt;({tag})&gt;", rf"<\1>", s, flags=re.IGNORECASE)
+        s = re.sub(rf"&lt;/({tag})&gt;", rf"</\1>", s, flags=re.IGNORECASE)
+        s = re.sub(rf"&lt;({tag})\s*/&gt;", rf"<\1/>", s, flags=re.IGNORECASE)
+    s = re.sub(r"&lt;(span\s+[^&]*)&gt;", r"<\1>", s, flags=re.IGNORECASE)
+    s = re.sub(r"&lt;/span&gt;", r"</span>", s, flags=re.IGNORECASE)
+
     return s
 
 

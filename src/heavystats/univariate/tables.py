@@ -368,7 +368,7 @@ class UnivariateTables:
         filepath: Optional[str] = None
     ) -> UnivariateTableReport:
         """
-        Calcula estadísticas descriptivas para variables numéricas según estándares ICMJE/STROBE.
+        Calcula estadísticas descriptivas para variables numéricas.
         Reporta Media (DE) para variables aproximadamente simétricas y Mediana [Q1 - Q3] para variables sesgadas.
         También calcula valores mín-máx, asimetría, curtosis y la prueba de Shapiro-Wilk.
 

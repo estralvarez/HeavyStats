@@ -173,7 +173,7 @@ class VariableTypeReport(dict, BaseReport):
         html_code = wrap_html_container(
             inner_html=inner_html,
             title="Distribución de Variables por Tipo de Dato",
-            subtitle=f"Dimensiones del Dataset: <strong>{self.shape[0]}</strong> filas × <strong>{self.shape[1]}</strong> columnas",
+            subtitle=f"Dimensiones del Dataset: **{self.shape[0]}** filas × **{self.shape[1]}** columnas",
             full_page=full_page
         )
         if filepath:
@@ -285,7 +285,7 @@ class VariablesTableReport(BaseReport):
         html_code = wrap_html_container(
             inner_html=inner_html,
             title="Clasificación de Variables",
-            subtitle=f"Total de Variables: <strong>{len(self.rows)}</strong> columnas",
+            subtitle=f"Total de Variables: **{len(self.rows)}** columnas",
             full_page=full_page
         )
         if filepath:
