@@ -52,8 +52,9 @@ class UnivariateTableReport(BaseReport):
     @property
     def df(self) -> pd.DataFrame:
         """Devuelve el DataFrame estructurado de la tabla (sin metadatos internos de grupo)."""
-        if self.group_col and self.group_col in self._df.columns:
-            return self._df.drop(columns=[self.group_col]).copy()
+        drop_cols = [c for c in self._df.columns if c == self.group_col or str(c).startswith("_")]
+        if drop_cols:
+            return self._df.drop(columns=drop_cols).copy()
         return self._df.copy()
 
     def to_dataframe(self) -> pd.DataFrame:

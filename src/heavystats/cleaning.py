@@ -522,3 +522,38 @@ def encode_dietary_frequencies(
                 pass
                 
     return df_clean
+
+
+def create_composite_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Crea indicadores booleanos compuestos para agrupar fuentes ambientales o de hábitos
+    con frecuencias bajas individuales (ej. Cualquier Taller, Cualquier Industria, Cualquier Lugar de Riesgo)
+    y calcula el Índice de Masa Corporal (IMC) si no está presente.
+    """
+    df_clean = df.copy()
+
+    # 1. Cualquier Taller
+    taller_cols = [c for c in df_clean.columns if c.startswith("Exposicion_Talleres_")]
+    if taller_cols:
+        df_clean["Exposicion_Cualquier_Taller"] = df_clean[taller_cols].fillna(0).max(axis=1).astype("Int64")
+
+    # 2. Cualquier Industria
+    ind_cols = [c for c in df_clean.columns if c.startswith("Exposicion_Industrias_")]
+    if ind_cols:
+        df_clean["Exposicion_Cualquier_Industria"] = df_clean[ind_cols].fillna(0).max(axis=1).astype("Int64")
+
+    # 3. Cualquier Lugar de Riesgo
+    lugar_cols = [c for c in df_clean.columns if c.startswith("Exposicion_Lugares_")]
+    if lugar_cols:
+        df_clean["Exposicion_Cualquier_Lugar_Riesgo"] = df_clean[lugar_cols].fillna(0).max(axis=1).astype("Int64")
+
+    # 4. Agua de Riesgo
+    if "Salud_Agua_pozo_profundo" in df_clean.columns:
+        df_clean["Salud_Cualquier_Agua_Riesgo"] = df_clean["Salud_Agua_pozo_profundo"].fillna(0).astype("Int64")
+
+    # 5. Cálculo del IMC si están Peso_kg y Altura_cm
+    if "Peso_kg" in df_clean.columns and "Altura_cm" in df_clean.columns and "IMC" not in df_clean.columns:
+        altura_m = df_clean["Altura_cm"] / 100.0
+        df_clean["IMC"] = (df_clean["Peso_kg"] / (altura_m ** 2)).round(2)
+
+    return df_clean

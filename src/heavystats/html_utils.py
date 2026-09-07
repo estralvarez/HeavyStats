@@ -287,6 +287,17 @@ def format_html_str(text: Any) -> str:
     s = s.replace("&gt;=LOD", "&ge; LOD")
     s = s.replace("&gt;=", "&ge;")
     s = s.replace("&lt;=", "&le;")
+
+    # Notación estadística con subíndices y superíndices
+    s = re.sub(r"r_rb\b|r_\{rb\}|\$r_\{?rb\}?\$|\$r_\{rb\}\$", "r<sub>rb</sub>", s, flags=re.IGNORECASE)
+    s = re.sub(r"r_pb\b|r_\{pb\}|\$r_\{?pb\}?\$|\$r_\{pb\}\$", "r<sub>pb</sub>", s, flags=re.IGNORECASE)
+    s = re.sub(r"rho_s\b|\\rho_s\b|ρ_s\b|ρₛ|\$?\\rho_\{?s\}?\$?", "ρ<sub>s</sub>", s, flags=re.IGNORECASE)
+    s = re.sub(r"p_FDR\b|p_fdr\b|p_\{FDR\}|\$p_\{?FDR\}?\$", "p<sub>FDR</sub>", s, flags=re.IGNORECASE)
+    s = re.sub(r"p_adj\b|p_\{adj\}|\$p_\{?adj\}?\$", "p<sub>adj</sub>", s, flags=re.IGNORECASE)
+    s = re.sub(r"\\epsilon\^2\b|epsilon\^2\b|ε\^2\b|\$\\epsilon\^2\$", "ε²", s, flags=re.IGNORECASE)
+    s = re.sub(r"\\eta\^2\b|eta\^2\b|η\^2\b|\$\\eta\^2\$", "η²", s, flags=re.IGNORECASE)
+    s = re.sub(r"\\omega\^2\b|omega\^2\b|ω\^2\b|\$\\omega\^2\$", "ω²", s, flags=re.IGNORECASE)
+
     s = s.replace("$", "")
 
     # Marcado Markdown a etiquetas HTML
@@ -375,7 +386,7 @@ def render_html_table(
     spanner_list = spanners or []
     note_list = notes or []
 
-    cols = [c for c in df.columns if c != group_col]
+    cols = [c for c in df.columns if c != group_col and not str(c).startswith("_")]
     ncols = len(cols)
 
     table_lines = []

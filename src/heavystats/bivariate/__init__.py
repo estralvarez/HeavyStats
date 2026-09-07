@@ -1,10 +1,10 @@
 """
-Módulo de Análisis Bivariantes de HeavyStats.
+Módulo de Análisis Bivariante de HeavyStats (`heavystats.bivariate`).
+Implementa el protocolo de análisis estadístico bivariante bioestadístico y toxicológico.
 """
 
 from heavystats.bivariate.tests import (
     mann_whitney_test,
-    welch_ttest_log,
     kruskal_wallis_test,
     dunn_posthoc_test,
     jonckheere_terpstra_test,
@@ -14,6 +14,8 @@ from heavystats.bivariate.tests import (
     adjust_pvalues,
     hodges_lehmann_2sample,
     bootstrap_ci_diff_medians,
+    rank_bivariate_associations,
+    collinearity_matrix,
 )
 from heavystats.bivariate.tables import (
     BivariateTables,
@@ -23,9 +25,15 @@ from heavystats.bivariate.plots import (
     BivariatePlots,
 )
 from heavystats.bivariate.constants import (
-    DEFAULT_PRIMARY_BINARY_VARS,
     DEFAULT_PRIMARY_METALS,
-    DEFAULT_EXPLORATORY_GROUPS,
+    DEFAULT_METAL_LIMITS,
+    DEFAULT_METAL_LODS,
+    DEFAULT_METAL_CUTOFFS,
+    DEFAULT_METAL_PAIRS,
+    DEFAULT_BIVARIATE_GROUPS,
+    CDC_LEAD_REFERENCE_VALUE,
+    EPA_MERCURY_REFERENCE_VALUE,
+    OMS_CADMIUM_REFERENCE_VALUE,
     DIET_ORDINAL_MAP,
     DIET_ORDINAL_LABELS,
 )
@@ -35,7 +43,6 @@ __all__ = [
     "BivariateTableReport",
     "BivariatePlots",
     "mann_whitney_test",
-    "welch_ttest_log",
     "kruskal_wallis_test",
     "dunn_posthoc_test",
     "jonckheere_terpstra_test",
@@ -45,9 +52,17 @@ __all__ = [
     "adjust_pvalues",
     "hodges_lehmann_2sample",
     "bootstrap_ci_diff_medians",
-    "DEFAULT_PRIMARY_BINARY_VARS",
+    "rank_bivariate_associations",
+    "collinearity_matrix",
     "DEFAULT_PRIMARY_METALS",
-    "DEFAULT_EXPLORATORY_GROUPS",
+    "DEFAULT_METAL_LIMITS",
+    "DEFAULT_METAL_LODS",
+    "DEFAULT_METAL_CUTOFFS",
+    "DEFAULT_METAL_PAIRS",
+    "DEFAULT_BIVARIATE_GROUPS",
+    "CDC_LEAD_REFERENCE_VALUE",
+    "EPA_MERCURY_REFERENCE_VALUE",
+    "OMS_CADMIUM_REFERENCE_VALUE",
     "DIET_ORDINAL_MAP",
     "DIET_ORDINAL_LABELS",
 ]
