@@ -26,10 +26,17 @@ share/python-wheels/
 *.egg
 MANIFEST
 scratch/
+output_bivariante/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-*.ipynb
+notebooks/**/.ipynb_checkpoints
 
 # Virtual Environments
 .venv/
@@ -37,10 +44,11 @@ venv/
 ENV/
 env/
 
-# Spyder project settings
+# Spyder / VSCode / IDE settings
 .spyproject/
+.vscode/
+.idea/
 
 # Environment variables
 .env
 .env.*
-src/notebooks/*.ipynb

@@ -1,25 +1,63 @@
 [project]
 name = "heavystats"
-version = "0.2.0.dev1"
-description = " paquete para análisis de metales pesados en niñas y niños"
+version = "0.3.0"
+description = "Paquete estadístico para análisis y biomonitoreo de metales pesados en salud infantil"
 readme = "README.md"
+license = "MIT"
 authors = [{ name = "estralvarez", email = "estralvarez@gmail.com" }]
-requires-python = ">=3.13"
-dependencies = [
-    "numpy>=2.3.5,<2.4.0",
-    "pandas>=3.0.5",
-    "scipy>=1.18.1",
-    "seaborn>=0.13.2",
-    "matplotlib>=3.10.0",
-    "openpyxl>=3.1.5",
+requires-python = ">=3.11"
+keywords = [
+    "heavy-metals",
+    "statistics",
+    "epidemiology",
+    "pediatrics",
+    "toxicology",
+    "biomonitoring",
+    "data-analysis",
+    "lead",
+    "mercury",
+    "cadmium",
+    "arsenic",
 ]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Healthcare Industry",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Typing :: Typed",
+]
+dependencies = [
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "scipy>=1.12.0",
+    "seaborn>=0.13.0",
+    "matplotlib>=3.8.0",
+    "openpyxl>=3.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/estralvarez/HeavyStats"
+Repository = "https://github.com/estralvarez/HeavyStats"
+Issues = "https://github.com/estralvarez/HeavyStats/issues"
+Documentation = "https://github.com/estralvarez/HeavyStats#readme"
 
 [dependency-groups]
 dev = [
-    "ipykernel>=6.29.3,<7",
-    "spyder-kernels==3.1.5",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "build>=1.2.0",
+    "twine>=5.0.0",
+    "ipykernel>=6.29.3",
+    "spyder-kernels>=3.1.0",
 ]
-
 
 [build-system]
 requires = ["uv_build>=0.12.0,<0.13.0"]
