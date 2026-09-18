@@ -1,6 +1,6 @@
 [project]
 name = "heavystats"
-version = "0.3.0"
+version = "0.3.1"
 description = "Paquete estadístico para análisis y biomonitoreo de metales pesados en salud infantil"
 readme = "README.md"
 license = "MIT"
@@ -35,7 +35,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "numpy>=1.26.0",
+    "numpy>=2.3.5,<2.4.0",
     "pandas>=2.2.0",
     "scipy>=1.12.0",
     "seaborn>=0.13.0",
@@ -56,7 +56,6 @@ dev = [
     "build>=1.2.0",
     "twine>=5.0.0",
     "ipykernel>=6.29.3",
-    "spyder-kernels>=3.1.0",
 ]
 
 [build-system]

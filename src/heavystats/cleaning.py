@@ -199,7 +199,7 @@ def columns_type(data: pd.DataFrame) -> VariableTypeReport:
 
 def categorical_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Devuelve el DataFrame conteniendo únicamente las variables categóricas."""
-    return df.select_dtypes(include=["object", "category"])
+    return df.select_dtypes(include=["object", "category", "str"])
 
 def numerical_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Devuelve el DataFrame conteniendo únicamente las variables numéricas."""
@@ -380,7 +380,7 @@ def standardize_boolean_columns(df: pd.DataFrame, columns: Optional[List[str]] =
     preservando los valores nulos (NaN)."""
     df_clean = df.copy()
     if columns is None:
-        columns = df_clean.select_dtypes(include=["object", "category"]).columns.tolist()
+        columns = df_clean.select_dtypes(include=["object", "category", "str"]).columns.tolist()
         
     mapping = {
         "sí": "SI", "si": "SI", "sï": "SI", "sI": "SI",
@@ -556,4 +556,4 @@ def create_composite_indicators(df: pd.DataFrame) -> pd.DataFrame:
         altura_m = df_clean["Altura_cm"] / 100.0
         df_clean["IMC"] = (df_clean["Peso_kg"] / (altura_m ** 2)).round(2)
 
-    return df_clean
+    return df_clean

@@ -37,6 +37,7 @@ htmlcov/
 # Jupyter Notebook
 .ipynb_checkpoints
 notebooks/**/.ipynb_checkpoints
+tests.ipynb
 
 # Virtual Environments
 .venv/
