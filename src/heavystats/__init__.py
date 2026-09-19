@@ -1,4 +1,4 @@
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 
 from heavystats.validation import ValidationReport, validate_data
 from heavystats.comparation import (
@@ -98,7 +98,14 @@ __all__ = [
     "CDC_BMI_REFERENCE",
     "get_label",
     "check_for_updates",
+    "launch_studio",
 ]
+
+
+def launch_studio():
+    """Lanza la interfaz de usuario de terminal interactiva de HeavyStats Studio."""
+    from heavystats.studio.app import iniciar_tui
+    return iniciar_tui()
 
 # Verificación de versiones no bloqueante en segundo plano al importar
 try:

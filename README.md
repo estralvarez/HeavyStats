@@ -22,6 +22,7 @@
 
 ## 🌟 Características Principales
 
+- **🖥️ HeavyStats Studio & CLI**: Entorno de terminal interactivo (TUI con Textual) y generador automatizado de proyectos y cuadernos de análisis reproducibles por metal (Plomo, Mercurio, Cadmio).
 - **🔬 Control de Calidad Automatizado**: Validación metodológica de datos biológicos (límites de detección LOD, rangos plausibles, consistencia antropométrica según CDC/OMS).
 - **🧹 Preprocesamiento Epidemiológico**: Limpieza de encuestas, desagregación de respuestas múltiples, estandarización de frecuencias dietéticas e indicadores compuestos de vulnerabilidad.
 - **📊 Análisis Univariante con Calidad de Publicación**: Generación de tablas formateadas (estilo APA/médico) con visualización interactiva HTML forzada en modo claro, exportables a Excel, CSV y LaTeX.
@@ -50,7 +51,66 @@ uv add heavystats
 
 ---
 
-## 🚀 Guía de Inicio Rápido (Quickstart)
+## 🖥️ HeavyStats Studio (TUI & CLI)
+
+HeavyStats incluye un estudio interactivo de terminal para inicializar y estructurar automáticamente proyectos completos de bioanálisis con sus carpetas analíticas y 6 cuadernos reproducibles listos para ejecutar.
+
+### Ejecución con `uv`
+
+```bash
+# Iniciar la interfaz visual interactiva de terminal (TUI)
+uv run heavystats
+
+# Comando alternativo equivalente
+uv run heavystats-studio
+
+# Ejecución directa para un metal específico (modo headless / consola)
+uv run heavystats -m plomo --no-tui
+uv run heavystats -m mercurio --no-tui
+uv run heavystats -m cadmio --no-tui
+
+# Consultar opciones y ayuda del CLI
+uv run heavystats --help
+```
+
+### Iniciar desde Python
+
+```python
+import heavystats as hs
+
+# Lanza la interfaz gráfica interactiva de terminal
+hs.launch_studio()
+```
+
+### Estructura Generada por el Studio
+
+Al inicializar un análisis para un metal, se crea la estructura estándar de investigación:
+
+```text
+├── datos/
+│   ├── datos_{metal}.csv
+│   └── procesados/
+├── salidas/
+│   ├── control_calidad/
+│   ├── univariante/
+│   │   ├── tablas/
+│   │   └── graficos/
+│   └── bivariante/
+│       ├── tablas/
+│       └── graficos/
+├── validacion.ipynb
+├── filtros.ipynb
+├── univariante/
+│   ├── 01_tablas.ipynb
+│   └── 02_graficos.ipynb
+└── bivariante/
+    ├── 01_analisis_estadistico.ipynb
+    └── 02_graficos_bivariantes.ipynb
+```
+
+---
+
+## 🚀 Guía de Inicio Rápido en Python (Quickstart)
 
 ### 1. Carga y Control de Calidad de Datos
 
@@ -145,6 +205,8 @@ comp_report.to_excel("comparacion_sectores.xlsx")
 
 | Módulo | Descripción |
 | :--- | :--- |
+| `heavystats.studio` | Entorno interactivo de terminal (TUI) y generador automatizado de proyectos bioestadísticos. |
+| `heavystats.cli` | Punto de entrada unificado por línea de comandos para el comando `heavystats`. |
 | `heavystats.validation` | Reglas de validación biológica, rangos plausibles y generación de reportes de calidad. |
 | `heavystats.cleaning` | Limpieza, decodificación, tipificación de variables e ingeniería de indicadores compuestos. |
 | `heavystats.univariate` | Estadísticos descriptivos robustos, percentiles de referencia, tablas APA y gráficos de distribución. |
@@ -173,7 +235,7 @@ Si utilizas `heavystats` en tus investigaciones científicas, tesis o reportes d
   author = {Alvarez, Estrada},
   title = {HeavyStats: Statistical framework for heavy metals biomonitoring and pediatric epidemiology},
   year = {2026},
-  version = {0.3.0},
+  version = {0.4.0},
   url = {https://github.com/estralvarez/HeavyStats}
 }
 ```

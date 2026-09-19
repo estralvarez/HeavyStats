@@ -3,7 +3,7 @@ import heavystats as hs
 
 
 def test_package_version():
-    assert hs.__version__ == "0.3.1"
+    assert hs.__version__ == "0.4.0"
 
 
 def test_package_exports():
@@ -19,6 +19,7 @@ def test_package_exports():
     assert hasattr(hs, "mann_whitney_test")
     assert hasattr(hs, "kruskal_wallis_test")
     assert hasattr(hs, "spearman_matrix")
+    assert hasattr(hs, "launch_studio")
 
 
 def test_bundled_data_exists():
