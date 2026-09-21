@@ -1,6 +1,6 @@
 [project]
 name = "heavystats"
-version = "0.4.0"
+version = "0.4.1"
 description = "Paquete estadístico para análisis y biomonitoreo de metales pesados en salud infantil"
 readme = "README.md"
 license = "MIT"

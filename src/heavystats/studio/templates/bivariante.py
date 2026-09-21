@@ -42,7 +42,7 @@ if not ruta_datos.exists():
     df_proc = hs.create_composite_indicators(hs.encode_dietary_frequencies(hs.desaggregate_multiple_responses(hs.standardize_boolean_columns(df_raw))))
     df_analytical = hs.select_metal(df_proc, concentration_col="{key}")
 else:
-    df_analytical = pd.read_csv(ruta_datos)
+    df_analytical = pd.read_csv(ruta_datos, encoding="utf-8")
 
 bt = BivariateTables(df_analytical)
 salidas_tablas = base_dir / "salidas" / "bivariante" / "tablas"
@@ -209,7 +209,7 @@ if not ruta_datos.exists():
     df_proc = hs.create_composite_indicators(hs.encode_dietary_frequencies(hs.desaggregate_multiple_responses(hs.standardize_boolean_columns(df_raw))))
     df_analytical = hs.select_metal(df_proc, concentration_col="{key}")
 else:
-    df_analytical = pd.read_csv(ruta_datos)
+    df_analytical = pd.read_csv(ruta_datos, encoding="utf-8")
 
 bp = BivariatePlots(df_analytical)
 bt = BivariateTables(df_analytical)

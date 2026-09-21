@@ -43,7 +43,7 @@ print(f"Dataset bruto cargado: {{df_raw.shape[0]}} observaciones y {{df_raw.shap
         {
             "tipo": "markdown",
             "contenido": """---
-## 2. Auditoría Sistemática de Calidad (10 Reglas de HeavyStats)
+## 2. Auditoría Sistemática de Calidad de los Datos
 
 Ejecutamos la rutina `validate_data()` que somete el dataset a una batería de 10 pruebas lógicas, matemáticas y biológicas para certificar la integridad de los datos antes de cualquier inferencia:
 

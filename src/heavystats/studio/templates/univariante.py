@@ -46,8 +46,8 @@ if not ruta_metal.exists():
     df_total = hs.create_composite_indicators(hs.encode_dietary_frequencies(hs.desaggregate_multiple_responses(hs.standardize_boolean_columns(df_raw))))
     df_analytical = hs.select_metal(df_total, concentration_col="{key}")
 else:
-    df_total = pd.read_csv(ruta_poblacion) if ruta_poblacion.exists() else None
-    df_analytical = pd.read_csv(ruta_metal)
+    df_total = pd.read_csv(ruta_poblacion, encoding="utf-8") if ruta_poblacion.exists() else None
+    df_analytical = pd.read_csv(ruta_metal, encoding="utf-8")
 
 tables = UnivariateTables(df_analytical, df_total=df_total)
 print(f"Motor UnivariateTables listo para {nombre} ({simbolo}).")"""
@@ -189,7 +189,7 @@ if not ruta_metal.exists():
     df_raw = hs.load_data(base_dir / "datos" / "{archivo_datos}")
     df_analytical = hs.select_metal(hs.standardize_boolean_columns(df_raw), concentration_col="{key}")
 else:
-    df_analytical = pd.read_csv(ruta_metal)
+    df_analytical = pd.read_csv(ruta_metal, encoding="utf-8")
 
 uplots = UnivariatePlots(df_analytical, palette="crest")
 salidas_graficos = base_dir / "salidas" / "univariante" / "graficos"

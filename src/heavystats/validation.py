@@ -31,6 +31,7 @@ class ValidationReport(BaseReport):
         dir_path = os.path.dirname(filepath)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
+        kwargs.setdefault("encoding", "utf-8")
         self.to_dataframe().to_csv(filepath, index=kwargs.get("index", False), **kwargs)
 
     def to_excel(self, filepath: str, sheet_name: str = "Control_Calidad", **kwargs: Any) -> None:
@@ -124,6 +125,9 @@ def validate_data(
     """Evalúa un DataFrame contra reglas de calidad de datos."""
     
     checks = []
+    
+    # Sanitizar nombres de columnas para prevenir fallos por BOM invisible (\ufeff) o visible (ï»¿)
+    data = data.rename(columns=lambda c: str(c).lstrip("\ufeff").lstrip("ï»¿").strip())
     
     # Parámetros por defecto para columnas críticas
     if critical_cols is None:

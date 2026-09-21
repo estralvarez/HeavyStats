@@ -106,7 +106,7 @@ def garantizar_dataset_base(cfg):
     if not archivo_destino.exists():
         try:
             df_base = hs.load_data()
-            df_base.to_csv(archivo_destino, sep=";", decimal=",", encoding="latin1", index=False)
+            df_base.to_csv(archivo_destino, sep=";", decimal=",", encoding="utf-8", index=False)
             print(f"[OK] Dataset generado a partir de HeavyStats en: {archivo_destino}")
         except Exception as e:
             print(f"[AVISO] No se pudo generar {archivo_destino}: {e}")

@@ -25,10 +25,16 @@ def load_data(csv_path: Optional[Any] = None) -> pd.DataFrame:
     if not CSV_PATH.exists():
         raise FileNotFoundError(f"No se pudo encontrar el archivo CSV en la ruta: {CSV_PATH.resolve()}")
     
-    # Cargar usando codificación UTF-8 y forzando Muestra_Codificada a tipo entero nullable (Int64)
-    df = pd.read_csv(CSV_PATH, sep=";", decimal=',', encoding="latin1", dtype={"Muestra_Codificada": "Int64"})
+    # Cargar usando codificación UTF-8 (utf-8-sig elimina automáticamente el BOM) con fallback a latin1
+    try:
+        df = pd.read_csv(CSV_PATH, sep=";", decimal=',', encoding="utf-8-sig", dtype={"Muestra_Codificada": "Int64"})
+    except UnicodeDecodeError:
+        df = pd.read_csv(CSV_PATH, sep=";", decimal=',', encoding="latin1", dtype={"Muestra_Codificada": "Int64"})
     
-    # Diccionario de reemplazo de cadenas mis-encodadas (que contienen \ufffd)
+    # Sanitizar nombres de columnas por si persiste algún BOM invisible (\ufeff) o visible (ï»¿)
+    df.columns = [str(c).lstrip("\ufeff").lstrip("ï»¿").strip() for c in df.columns]
+    
+    # Limpieza preventiva para archivos que hayan sido guardados previamente con el carácter de reemplazo (\ufffd)
     replacements = {
         "Mari\ufffdo": "Mariño",
         "Veh\ufffdculo": "Vehículo",
@@ -44,11 +50,12 @@ def load_data(csv_path: Optional[Any] = None) -> pd.DataFrame:
         "mec\ufffdnico": "mecánico",
     }
     
-    # Aplicar la limpieza en todas las columnas de tipo string
+    # Aplicar la limpieza en todas las columnas de tipo string si contienen \ufffd
     for col in df.columns:
         if pd.api.types.is_string_dtype(df[col]):
-            for bad, good in replacements.items():
-                df[col] = df[col].str.replace(bad, good, regex=False)
+            if df[col].astype(str).str.contains("\ufffd").any():
+                for bad, good in replacements.items():
+                    df[col] = df[col].str.replace(bad, good, regex=False)
                 
     return df
 
@@ -98,6 +105,7 @@ class VariableTypeReport(dict, BaseReport):
         dir_path = os.path.dirname(filepath)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
+        kwargs.setdefault("encoding", "utf-8")
         self.to_dataframe().to_csv(filepath, index=kwargs.get("index", False), **kwargs)
 
     def to_excel(self, filepath: str, sheet_name: str = "Tipos_Variables", **kwargs: Any) -> None:
@@ -224,6 +232,7 @@ class VariablesTableReport(BaseReport):
         dir_path = os.path.dirname(filepath)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
+        kwargs.setdefault("encoding", "utf-8")
         self.to_dataframe().to_csv(filepath, index=kwargs.get("index", False), **kwargs)
 
     def to_excel(self, filepath: str, sheet_name: str = "Clasificacion_Variables", **kwargs: Any) -> None:

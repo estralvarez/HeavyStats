@@ -72,6 +72,7 @@ class UnivariateTableReport(BaseReport):
         dir_path = os.path.dirname(filepath)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
+        kwargs.setdefault("encoding", "utf-8")
         self.df.to_csv(filepath, index=kwargs.get("index", False), **kwargs)
 
     def to_excel(self, filepath: str, sheet_name: str = "Resumen", **kwargs: Any) -> None:
