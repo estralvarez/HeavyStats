@@ -3,7 +3,7 @@ import heavystats as hs
 
 
 def test_package_version():
-    assert hs.__version__ == "0.4.0"
+    assert hs.__version__ == "0.4.1"
 
 
 def test_package_exports():
@@ -13,7 +13,9 @@ def test_package_exports():
     assert hasattr(hs, "ComparationReport")
     assert hasattr(hs, "load_data")
     assert hasattr(hs, "UnivariateTables")
+    assert hasattr(hs, "BasePlots")
     assert hasattr(hs, "UnivariatePlots")
+    assert hasattr(hs, "desglosar_multirrespuesta")
     assert hasattr(hs, "BivariateTables")
     assert hasattr(hs, "BivariatePlots")
     assert hasattr(hs, "mann_whitney_test")

@@ -1,4 +1,4 @@
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 from heavystats.validation import ValidationReport, validate_data
 from heavystats.comparation import (
@@ -21,8 +21,10 @@ from heavystats.cleaning import (
     create_composite_indicators,
 )
 from heavystats.univariate import (
+    BasePlots,
     UnivariateTables,
     UnivariatePlots,
+    desglosar_multirrespuesta,
     DEFAULT_LABELS_MAP,
     DEFAULT_CUSTOM_PARAMS,
     DEFAULT_PERMISSIBLE_LIMITS,
@@ -71,8 +73,10 @@ __all__ = [
     "desaggregate_multiple_responses",
     "encode_dietary_frequencies",
     "create_composite_indicators",
+    "BasePlots",
     "UnivariateTables",
     "UnivariatePlots",
+    "desglosar_multirrespuesta",
     "BivariateTables",
     "BivariateTableReport",
     "BivariatePlots",

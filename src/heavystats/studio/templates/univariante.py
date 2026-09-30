@@ -200,19 +200,20 @@ print(f"Motor UnivariatePlots listo para generación de figuras de {nombre} a 30
         {
             "tipo": "markdown",
             "contenido": f"""---
-## 2. Diagrama Combinado: Boxplot e Histograma de {nombre} con Límite {entidad}
+## 2. Pipeline de Distribución: Boxplot e Histograma de {nombre} con Límite {entidad}
 
-Visualización que integra la dispersión individual (jitter points), cuartiles, mediana y la referencia de seguridad toxicológica ({limite} {unidad})."""
+Visualización integrada en dos paneles coordinados que combina la dispersión individual (jitter points), cuartiles, mediana, histograma con KDE y el umbral de referencia toxicológico ({limite} {unidad}) con escala natural y logarítmica."""
         },
         {
             "tipo": "code",
-            "contenido": f"""# Boxplot + Histograma con límite permisible anotado
-figs_metal = uplots.plot_box_histograms(
+            "contenido": f"""# Pipeline de Distribución con límite permisible y escala logarítmica
+figs_metal = uplots.plot_distribucion(
     columns="{col_conc}",
     show_limit=True,
     permissible_limit={limite},
+    log_scale=True,
     save_dir=str(salidas_graficos),
-    save_format="png",
+    save_format=["png", "pdf"],
     dpi=300
 )
 plt.show()"""
@@ -220,7 +221,30 @@ plt.show()"""
         {
             "tipo": "markdown",
             "contenido": f"""---
-## 3. Gráfico Q-Q Normal de {nombre}
+## 3. Histograma Estratificado con KDE por Factor de Exposición ({nombre})
+
+Visualización de la distribución sérica de {nombre} estratificada por covariables clave (como Sexo), utilizando barras apiladas (`multiple="stack"`), separación visual (`shrink=0.8`) y curvas de densidad KDE superpuestas para contrastar subpoblaciones."""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""# Histograma estratificado por Sexo con barras apiladas y estimación de densidad KDE
+figs_hist_sexo = uplots.plot_histograma_estratificado(
+    columns="{col_conc}",
+    hue="Sexo",
+    multiple="stack",
+    shrink=0.8,
+    kde=True,
+    palette="Set1",
+    save_dir=str(salidas_graficos),
+    save_format=["png", "pdf"],
+    dpi=300
+)
+plt.show()"""
+        },
+        {
+            "tipo": "markdown",
+            "contenido": f"""---
+## 4. Gráfico Q-Q Normal de {nombre}
 
 Evaluación visual del ajuste de la distribución observada frente a los cuantiles teóricos de la distribución Normal."""
         },
@@ -230,7 +254,7 @@ Evaluación visual del ajuste de la distribución observada frente a los cuantil
 figs_qq = uplots.plot_qq(
     columns="{col_conc}",
     save_dir=str(salidas_graficos),
-    save_format="png",
+    save_format=["png", "pdf"],
     dpi=300
 )
 plt.show()"""
@@ -238,19 +262,86 @@ plt.show()"""
         {
             "tipo": "markdown",
             "contenido": """---
-## 4. Distribución de Variables Categóricas y Factores de Exposición
+## 5. Distribución de Variables Categóricas
 
-Gráficos de barras con frecuencias absolutas y porcentajes para las principales covariables estratificadas."""
+Diagramas de barras horizontales y verticales con frecuencias absolutas y relativas para las covariables sociodemográficas."""
         },
         {
             "tipo": "code",
             "contenido": """# Visualización de covariables categóricas
-figs_cat = uplots.plot_categorical(
+figs_cat = uplots.plot_categorico(
     columns=["Sexo", "Sector", "Institucion"],
     save_dir=str(salidas_graficos),
-    save_format="png",
+    save_format=["png", "pdf"],
     dpi=300
 )
+plt.show()"""
+        },
+        {
+            "tipo": "markdown",
+            "contenido": """---
+## 6. Pipeline Multirrespuesta: Fuentes de Agua
+
+Frecuencia y porcentaje de acceso a fuentes de agua para consumo en la población escolar y comunitaria."""
+        },
+        {
+            "tipo": "code",
+            "contenido": """# Gráfico de selección múltiple para fuentes de agua
+if "Salud_Agua" in df_analytical.columns:
+    fig_agua = uplots.plot_multirrespuesta(
+        "Salud_Agua",
+        title="Fuentes de Agua para Consumo Humano",
+        save_dir=str(salidas_graficos),
+        save_format=["png", "pdf"],
+        dpi=300
+    )
+    plt.show()"""
+        },
+        {
+            "tipo": "markdown",
+            "contenido": """---
+## 7. Pipeline de Factores de Exposición Agrupados
+
+Factores ambientales y ocupacionales agrupados por dimensiones analíticas (talleres, industrias, lugares de riesgo)."""
+        },
+        {
+            "tipo": "code",
+            "contenido": """# Factores de exposición agrupados
+fig_factores = uplots.plot_factores(
+    dimensions={
+        "Exposicion_Lugares": "Lugares de Riesgo",
+        "Exposicion_Talleres": "Talleres y Servicios",
+        "Exposicion_Industrias": "Industrias Químicas/Metales"
+    },
+    save_dir=str(salidas_graficos),
+    save_format=["png", "pdf"],
+    dpi=300
+)
+plt.show()"""
+        },
+        {
+            "tipo": "markdown",
+            "contenido": """---
+## 8. Pipeline Mosaico de Determinantes de Riesgo
+
+Mosaico multipanel que integra el consumo de pescado/mariscos, bombillos ahorradores y convivencia con fumadores."""
+        },
+        {
+            "tipo": "code",
+            "contenido": """# Mosaico de determinantes toxicológicos mediante mosaico y plot_categorico
+fig_determinantes, axd = uplots.crear_mosaico(
+    [["pescado", "pescado"],
+     ["bombillos", "fumadores"]],
+    figsize=(10.5, 7.2),
+    height_ratios=(1.25, 0.95),
+    bold=True
+)
+
+uplots.plot_categorico("Alim_Pescados", ax=axd["pescado"], title="(a) Consumo de Pescado y Mariscos", color="#2b6cb0")
+uplots.plot_categorico("Salud_Bombillos", ax=axd["bombillos"], title="(b) Bombillos Ahorradores en el Hogar", order=["No", "Sí"], color="#319795")
+uplots.plot_categorico("Salud_Fuma", ax=axd["fumadores"], title="(c) Convivencia con Fumadores en el Hogar", order=["No", "Sí"], color="#4a5568")
+
+fig_determinantes.tight_layout()
 plt.show()
 
 print(f"¡Figuras univariantes guardadas exitosamente en: {salidas_graficos}!")"""
