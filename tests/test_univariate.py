@@ -12,13 +12,14 @@ def test_univariate_tables_init():
 def test_univariate_metal_summary():
     df = hs.load_data()
     tables = UnivariateTables(df)
-    # Check if there are metal columns in df
-    metal_cols = [c for c in ["Plomo_Sangre", "Mercurio_Sangre", "Cadmio_Sangre", "Arsenico_Orina"] if c in df.columns]
-    if metal_cols:
-        summary = tables.metal_summary(metals=metal_cols)
-        assert summary is not None
-        assert isinstance(summary.to_dataframe(), pd.DataFrame)
-        assert len(summary.to_dataframe()) > 0
+    summary = tables.metal_summary()
+    assert summary is not None
+    res_df = summary.to_dataframe()
+    assert isinstance(res_df, pd.DataFrame)
+    assert len(res_df) > 0
+    assert "Mediana [RIQ]" in res_df.columns
+    assert "Media (DE)" in res_df.columns
+    assert "Media Geom. (GSD)" not in res_df.columns
 
 
 def test_univariate_categorical_summary():

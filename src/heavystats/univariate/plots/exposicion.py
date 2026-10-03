@@ -11,6 +11,7 @@ import matplotlib.patches as mpatches
 import seaborn as sns
 
 from heavystats.univariate.plots.base import BasePlots
+from heavystats.univariate.constants import DEFAULT_LABELS_MAP
 from heavystats.cleaning import desaggregate_multiple_responses
 
 
@@ -20,6 +21,7 @@ class ExposicionPlotsMixin:
     def plot_factores(
         self: BasePlots,
         dimensions: Optional[Dict[str, str]] = None,
+        labels_map: Optional[Dict[str, str]] = None,
         sep: str = ";",
         exclude_patterns: Optional[Sequence[str]] = ("ningun", "ninguno", "ninguna", "nada"),
         dim_colors: Optional[Dict[str, Any]] = None,
@@ -56,15 +58,56 @@ class ExposicionPlotsMixin:
         if cols_presentes:
             df_desag = desaggregate_multiple_responses(self.df, columns=cols_presentes, separator=sep)
             excl = [p.lower() for p in exclude_patterns] if exclude_patterns else []
+            active_map = self.labels_map.copy()
+            if labels_map is not None:
+                active_map.update(labels_map)
 
             for col_orig, dim in dimensions.items():
                 real_col = self._resolve_column(col_orig)
                 prefix = f"{real_col}_"
                 for c in df_desag.columns:
                     if c.startswith(prefix):
-                        factor_name = c[len(prefix):].replace("_", " ")
+                        raw_suffix = c[len(prefix):].replace("_", " ").strip()
+                        if excl and (any(p in raw_suffix.lower() for p in excl) or any(p in c.lower() for p in excl)):
+                            continue
+
+                        # Resolución de etiqueta formal en formato título / mayúscula inicial
+                        if c in active_map:
+                            factor_name = active_map[c]
+                        elif raw_suffix in active_map:
+                            factor_name = active_map[raw_suffix]
+                        elif c in DEFAULT_LABELS_MAP:
+                            factor_name = DEFAULT_LABELS_MAP[c]
+                        elif raw_suffix in DEFAULT_LABELS_MAP:
+                            factor_name = DEFAULT_LABELS_MAP[raw_suffix]
+                        else:
+                            raw_lower = raw_suffix.lower()
+                            if "taller" in dim.lower() or "taller" in real_col.lower():
+                                if "mecanic" in raw_lower:
+                                    factor_name = "Taller Mecánico"
+                                elif "latoner" in raw_lower:
+                                    factor_name = "Taller de Latonería"
+                                elif "carpinter" in raw_lower:
+                                    factor_name = "Taller de Carpintería"
+                                elif not raw_lower.startswith("taller"):
+                                    factor_name = f"Taller de {raw_suffix.title()}"
+                                else:
+                                    factor_name = raw_suffix.title()
+                            elif "industria" in dim.lower() or "industria" in real_col.lower():
+                                if "quimic" in raw_lower:
+                                    factor_name = "Fábrica de Productos Químicos"
+                                elif "metal" in raw_lower:
+                                    factor_name = "Fábrica de Metales"
+                                elif not (raw_lower.startswith("fábrica") or raw_lower.startswith("fabrica")):
+                                    factor_name = f"Fábrica de {raw_suffix.title()}"
+                                else:
+                                    factor_name = raw_suffix.title()
+                            else:
+                                factor_name = raw_suffix.title()
+
                         if excl and any(p in factor_name.lower() for p in excl):
                             continue
+
                         count_val = int(df_desag[c].sum(skipna=True))
                         if count_val > 0:
                             items.append({"Dimension": dim, "Factor": factor_name, "n": count_val})
@@ -77,6 +120,8 @@ class ExposicionPlotsMixin:
             return fig
 
         counts = pd.DataFrame(items)
+        # Consolidar si dos columnas mapean al mismo nombre de factor (ej. canale y canales)
+        counts = counts.groupby(["Dimension", "Factor"], as_index=False)["n"].sum()
         counts["pct"] = (counts["n"] / total) * 100
         counts = counts.sort_values(by=["Dimension", "n"], ascending=[True, True])
 
@@ -118,9 +163,10 @@ class ExposicionPlotsMixin:
         if ax is None:
             fig.tight_layout()
 
+        base_name = kwargs.get("base_name", "Factores_Exposicion_agrupado_elegante")
         self._save_figure(
             fig=fig,
-            base_name="Factores_Exposicion_agrupado_elegante",
+            base_name=base_name,
             save_dir=save_dir,
             formats=save_format,
             dpi=dpi,

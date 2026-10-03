@@ -60,7 +60,7 @@ print(f"Motor UnivariateTables listo para {nombre} ({simbolo}).")"""
 Evaluamos los biomarcadores séricos de {nombre} considerando:
 - **Límite de Detección Analítico (LOD)**: {lod}.
 - **Límite de Referencia Internacional {entidad}**.
-- Parámetros robustos: Media Geométrica (GM), Desviación Estándar Geométrica (GSD), Mediana [RIQ] y percentiles $p_5$ a $p_{{95}}$."""
+- Parámetros descriptivos: Mediana [RIQ], Media (DE) y percentiles $p_5$ a $p_{{95}}$."""
         },
         {
             "tipo": "code",
@@ -209,11 +209,12 @@ Visualización integrada en dos paneles coordinados que combina la dispersión i
             "contenido": f"""# Pipeline de Distribución con límite permisible y escala logarítmica
 figs_metal = uplots.plot_distribucion(
     columns="{col_conc}",
-    show_limit=True,
-    permissible_limit={limite},
-    log_scale=True,
+    log_scale=False,
+    color="#2b6cb0",
     save_dir=str(salidas_graficos),
     save_format=["png", "pdf"],
+    shrink=0.8,
+    bins=5,
     dpi=300
 )
 plt.show()"""
@@ -337,9 +338,26 @@ fig_determinantes, axd = uplots.crear_mosaico(
     bold=True
 )
 
-uplots.plot_categorico("Alim_Pescados", ax=axd["pescado"], title="(a) Consumo de Pescado y Mariscos", color="#2b6cb0")
-uplots.plot_categorico("Salud_Bombillos", ax=axd["bombillos"], title="(b) Bombillos Ahorradores en el Hogar", order=["No", "Sí"], color="#319795")
-uplots.plot_categorico("Salud_Fuma", ax=axd["fumadores"], title="(c) Convivencia con Fumadores en el Hogar", order=["No", "Sí"], color="#4a5568")
+uplots.plot_categorico(
+    "Alim_Pescados",
+    ax=axd["pescado"],
+    title="(a) Consumo de Pescado y Mariscos",
+    color="#2b6cb0"
+)
+uplots.plot_categorico(
+    "Salud_Bombillos",
+    ax=axd["bombillos"],
+    title="(b) Bombillos Ahorradores en el Hogar",
+    order=["No", "Sí"],
+    color="#319795"
+)
+uplots.plot_categorico(
+    "Salud_Fuma",
+    ax=axd["fumadores"],
+    title="(c) Convivencia con Fumadores en el Hogar",
+    order=["No", "Sí"],
+    color="#4a5568"
+)
 
 fig_determinantes.tight_layout()
 plt.show()

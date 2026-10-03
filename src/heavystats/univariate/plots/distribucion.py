@@ -196,6 +196,9 @@ class DistribucionPlotsMixin:
     def plot_distribucion(
         self: BasePlots,
         columns: Union[str, Sequence[str]],
+        color: Optional[Any] = None,
+        box_color: Optional[Any] = None,
+        hist_color: Optional[Any] = None,
         kde: bool = False,
         overlay_points: bool = True,
         bins: Optional[Any] = None,
@@ -222,7 +225,20 @@ class DistribucionPlotsMixin:
 
         figures = []
         palette_colors = sns.color_palette(self.palette)
-        color = palette_colors[0] if palette_colors else "teal"
+        if color is None and "color" in kwargs:
+            color = kwargs.pop("color")
+        elif "color" in kwargs:
+            kwargs.pop("color")
+
+        if color is None:
+            plot_color = palette_colors[0] if palette_colors else "teal"
+        elif isinstance(color, int):
+            plot_color = palette_colors[color % len(palette_colors)]
+        else:
+            plot_color = color
+
+        final_box_color = box_color if box_color is not None else plot_color
+        final_hist_color = hist_color if hist_color is not None else plot_color
         edge_c = "#0f172a" if bold_annotations else "#2c3e50"
 
         for col in cols:
@@ -245,7 +261,7 @@ class DistribucionPlotsMixin:
                 )
 
             # 1. Pipeline Boxplot superior
-            draw_boxplot(ax_box, data_clean, color=color, edge_color=edge_c, orientation="horizontal", overlay_points=overlay_points)
+            draw_boxplot(ax_box, data_clean, color=final_box_color, edge_color=edge_c, orientation="horizontal", overlay_points=overlay_points)
             ax_box.set(xlabel="", yticks=[])
             ax_box.tick_params(bottom=False, labelbottom=False)
             for spine in ["top", "right", "left", "bottom"]:
@@ -258,7 +274,7 @@ class DistribucionPlotsMixin:
             draw_histogram(
                 ax_hist,
                 data_clean,
-                color=color,
+                color=final_hist_color,
                 kde=kde,
                 log_scale=log_scale,
                 bins=bins,
@@ -322,6 +338,8 @@ class DistribucionPlotsMixin:
     def plot_qq(
         self: BasePlots,
         columns: Union[str, Sequence[str]],
+        color: Optional[Any] = None,
+        line_color: Optional[Any] = None,
         labels_map: Optional[Dict[str, str]] = None,
         ylabel: Optional[str] = None,
         figsize: Tuple[float, float] = (6.0, 5.5),
@@ -340,8 +358,13 @@ class DistribucionPlotsMixin:
 
         figures = []
         palette_colors = sns.color_palette(self.palette)
-        dot_color = palette_colors[0] if palette_colors else "teal"
-        line_color = palette_colors[1] if len(palette_colors) > 1 else "#d73027"
+        if color is None and "color" in kwargs:
+            color = kwargs.pop("color")
+        elif "color" in kwargs:
+            kwargs.pop("color")
+
+        dot_color = color if color is not None else (palette_colors[0] if palette_colors else "teal")
+        active_line_color = line_color if line_color is not None else (palette_colors[1] if len(palette_colors) > 1 else "#d73027")
 
         for col in cols:
             data_clean = self._clean_series(col, min_obs=3)
@@ -355,7 +378,7 @@ class DistribucionPlotsMixin:
                 fig, target_ax = self.crear_lienzo(figsize=figsize, dpi=dpi, bold=bold_annotations)
 
             var_label = ylabel if ylabel is not None else self.get_label(col, labels_map)
-            draw_qq(target_ax, data_clean, dot_color, line_color, var_label, bold=bold_annotations)
+            draw_qq(target_ax, data_clean, dot_color, active_line_color, var_label, bold=bold_annotations)
             self._style_axis(target_ax, tick_length=4.5, bold=bold_annotations)
 
             if bold_annotations:
@@ -385,6 +408,7 @@ class DistribucionPlotsMixin:
     def plot_histograma(
         self: BasePlots,
         columns: Union[str, Sequence[str]],
+        color: Optional[Any] = None,
         hue: Optional[str] = None,
         multiple: str = "layer",
         shrink: Optional[float] = None,
@@ -414,7 +438,17 @@ class DistribucionPlotsMixin:
 
         figures = []
         palette_colors = sns.color_palette(self.palette)
-        color = palette_colors[0] if palette_colors else "teal"
+        if color is None and "color" in kwargs:
+            color = kwargs.pop("color")
+        elif "color" in kwargs:
+            kwargs.pop("color")
+
+        if color is None:
+            plot_color = palette_colors[0] if palette_colors else "teal"
+        elif isinstance(color, int):
+            plot_color = palette_colors[color % len(palette_colors)]
+        else:
+            plot_color = color
         active_palette = palette if palette is not None else self.palette
 
         for col in cols:
@@ -469,7 +503,7 @@ class DistribucionPlotsMixin:
                 draw_histogram(
                     target_ax,
                     data=data_clean,
-                    color=color,
+                    color=plot_color,
                     kde=kde,
                     log_scale=log_scale,
                     bins=bins,
@@ -604,6 +638,7 @@ class DistribucionPlotsMixin:
     def plot_boxplot(
         self: BasePlots,
         columns: Union[str, Sequence[str]],
+        color: Optional[Any] = None,
         overlay_points: bool = True,
         log_scale: bool = False,
         labels_map: Optional[Dict[str, str]] = None,
@@ -624,7 +659,17 @@ class DistribucionPlotsMixin:
 
         figures = []
         palette_colors = sns.color_palette(self.palette)
-        color = palette_colors[0] if palette_colors else "teal"
+        if color is None and "color" in kwargs:
+            color = kwargs.pop("color")
+        elif "color" in kwargs:
+            kwargs.pop("color")
+
+        if color is None:
+            plot_color = palette_colors[0] if palette_colors else "teal"
+        elif isinstance(color, int):
+            plot_color = palette_colors[color % len(palette_colors)]
+        else:
+            plot_color = color
         edge_c = "#0f172a" if bold_annotations else "#2c3e50"
 
         for col in cols:
@@ -638,7 +683,7 @@ class DistribucionPlotsMixin:
             else:
                 fig, target_ax = self.crear_lienzo(figsize=figsize, dpi=dpi, bold=bold_annotations)
 
-            draw_boxplot(target_ax, data_clean, color=color, edge_color=edge_c, orientation="vertical", overlay_points=overlay_points)
+            draw_boxplot(target_ax, data_clean, color=plot_color, edge_color=edge_c, orientation="vertical", overlay_points=overlay_points)
 
             if log_scale:
                 target_ax.set_yscale("log")

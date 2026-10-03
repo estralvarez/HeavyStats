@@ -19,6 +19,7 @@ import os
 from typing import List, Dict, Optional, Any, Tuple, Union, Sequence
 import pandas as pd
 import numpy as np
+from scipy import stats
 
 from heavystats.html_utils import BaseReport, render_html_table, format_html_str
 from heavystats.bivariate.constants import (
@@ -35,15 +36,20 @@ from heavystats.bivariate.constants import (
 )
 from heavystats.bivariate.tests import (
     mann_whitney_test,
+    independent_t_test,
     kruskal_wallis_test,
+    anova_oneway_test,
     dunn_posthoc_test,
     jonckheere_terpstra_test,
     spearman_correlation,
+    pearson_correlation,
+    kendall_correlation,
     spearman_matrix,
     adjust_pvalues,
     rank_bivariate_associations,
     collinearity_matrix,
     fisher_chi2_test,
+    qualitative_association_test,
 )
 
 
@@ -2031,8 +2037,1223 @@ class BivariateTables:
         )
         return report
 
+    # =========================================================================
+    # Pilar 1: Cualitativa vs Cualitativa (Asociación Epidemiológica y Riesgo)
+    # =========================================================================
+
+    def qualitative_association(
+        self,
+        x: Optional[str] = None,
+        y: Optional[str] = None,
+        var_x: Optional[str] = None,
+        var_y: Optional[str] = None,
+        labels_map: Optional[Dict[str, str]] = None,
+        filepath: Optional[str] = None
+    ) -> BivariateTableReport:
+        """
+        Calcula la asociación bivariante completa entre dos variables cualitativas / categóricas (2x2 o RxC).
+        Aplica la prueba exacta de Fisher, Chi-cuadrado de independencia (con corrección de Yates para 2x2),
+        Odds Ratio (OR con IC 95%), Riesgo Relativo (RR con IC 95%) y V de Cramér / Coeficiente Phi.
+
+        Parámetros
+        ----------
+        x / var_x : str
+            Variable independiente / factor de exposición (ej. 'Salud_Agua_pozo_profundo', 'Es_Expuesto').
+        y / var_y : str
+            Variable dependiente / desenlace (ej. 'Excede_Umbral_Hg', 'Es_Expuesto', 'Sexo').
+        labels_map : Dict[str, str], opcional
+            Mapeo personalizado de nombres de variables.
+        filepath : str, opcional
+            Ruta para guardar el reporte en HTML.
+
+        Retorna
+        -------
+        BivariateTableReport
+            Reporte con tabla de contingencia formateada y métricas de asociación y riesgo.
+        """
+        if isinstance(self, pd.DataFrame):
+            return BivariateTables(self).qualitative_association(
+                x=x, y=y, var_x=var_x, var_y=var_y, labels_map=labels_map, filepath=filepath
+            )
+        col_x = x if x is not None else var_x
+        col_y = y if y is not None else var_y
+        if col_x is None or col_y is None:
+            raise ValueError("Debe especificar las dos variables cualitativas a contrastar (x e y).")
+
+        x_col = self._resolve_column(col_x)
+        y_col = self._resolve_column(col_y)
+
+        # Si y es un biomarcador continuo (ej. Mercurio_ug_L), binarizar por umbral clínico (ej. 5.0)
+        s_y = self.df[y_col]
+        is_y_numeric = pd.to_numeric(s_y, errors="coerce").notna().sum() > (0.5 * len(s_y.dropna()))
+        if is_y_numeric:
+            cutoff = DEFAULT_METAL_LIMITS.get(y_col, 5.0)
+            y_data = np.where(pd.to_numeric(s_y, errors="coerce") >= cutoff, f"≥ {cutoff:g}", f"< {cutoff:g}")
+            y_label_full = f"{self.get_label(y_col, labels_map)} (≥ {cutoff:g} µg/L)"
+        else:
+            y_data = s_y
+            y_label_full = self.get_label(y_col, labels_map)
+
+        x_data = self.df[x_col]
+        x_label_full = self.get_label(x_col, labels_map)
+
+        res = qualitative_association_test(x_data, y_data)
+        ctab = res["contingency_table"]
+
+        if ctab.empty:
+            return BivariateTableReport(
+                df=pd.DataFrame(),
+                title="Asociación Cualitativa no disponible",
+                subtitle="Datos insuficientes para construir tabla de contingencia.",
+                filepath=filepath
+            )
+
+        row_totals = ctab.sum(axis=1)
+        records = []
+        for row_val, row_series in ctab.iterrows():
+            row_tot = row_totals[row_val]
+            rec = {
+                x_label_full: str(row_val),
+            }
+            for col_val in ctab.columns:
+                cnt = row_series[col_val]
+                pct = (cnt / row_tot) * 100.0 if row_tot > 0 else 0.0
+                rec[f"{col_val} n (%)"] = f"{cnt} ({pct:.1f}%)"
+            rec["Total"] = f"{row_tot} (100.0%)"
+            records.append(rec)
+
+        res_df = pd.DataFrame(records)
+
+        notes = []
+        if res["is_2x2"]:
+            or_val = res["odds_ratio"]
+            or_ci = res["or_ci"]
+            rr_val = res["relative_risk"]
+            rr_ci = res["rr_ci"]
+            p_fish = res["fisher_p"]
+            p_chi = res["chi2_yates_p"]
+            v_cramer = res["cramers_v"]
+
+            or_str = f"{or_val:.2f} [{or_ci[0]:.2f}, {or_ci[1]:.2f}]" if pd.notna(or_val) else "N/D"
+            rr_str = f"{rr_val:.2f} [{rr_ci[0]:.2f}, {rr_ci[1]:.2f}]" if pd.notna(rr_val) else "N/D"
+            p_fish_str = f"{p_fish:.4f}" if pd.notna(p_fish) and p_fish >= 0.0001 else ("<0.0001" if pd.notna(p_fish) else "N/D")
+            p_chi_str = f"{p_chi:.4f}" if pd.notna(p_chi) and p_chi >= 0.0001 else ("<0.0001" if pd.notna(p_chi) else "N/D")
+            v_str = f"{v_cramer:.3f}" if pd.notna(v_cramer) else "N/D"
+
+            notes.append(f"Odds Ratio (OR exacto): {or_str}; Riesgo Relativo (RR): {rr_str}.")
+            notes.append(f"Prueba Exacta de Fisher (bilateral): p = {p_fish_str}; Chi-cuadrado (Yates): p = {p_chi_str}; V de Cramér (ϕ): {v_str}.")
+        else:
+            chi_val = res["chi2_stat"]
+            p_chi = res["chi2_p"]
+            v_cramer = res["cramers_v"]
+            notes.append(f"Chi-cuadrado de Pearson (RxC): χ² = {chi_val:.2f}, p = {p_chi:.4f}; V de Cramér: {v_cramer:.3f}.")
+
+        notes.append("Frecuencias expresadas como recuento absoluto y porcentaje por fila: n (%).")
+
+        col_alignments = {c: "c" for c in res_df.columns}
+        col_alignments[x_label_full] = "l"
+
+        title = f"Tabla de Contingencia: {x_label_full} vs. {y_label_full}"
+        subtitle = "Evaluación de asociación epidemiológica, riesgo relativo y significancia exacta"
+
+        report = BivariateTableReport(
+            df=res_df,
+            title=title,
+            subtitle=subtitle,
+            notes=notes,
+            filepath=filepath,
+            column_alignments=col_alignments
+        )
+        return report
+
+    def qualitative_summary(
+        self,
+        target: Optional[str] = None,
+        factors: Optional[Sequence[str]] = None,
+        target_col: Optional[str] = None,
+        feature_cols: Optional[Sequence[str]] = None,
+        candidate_features: Optional[Sequence[str]] = None,
+        target_cutoff: Optional[float] = None,
+        target_positive: Optional[Any] = None,
+        labels_map: Optional[Dict[str, str]] = None,
+        filepath: Optional[str] = None
+    ) -> BivariateTableReport:
+        """
+        Calcula una matriz resumen de factores de riesgo cualitativos frente a un desenlace binario
+        (ej. superación del umbral de mercurio ≥ 5.0 µg/L o condición de expuesto).
+        Reporta para cada factor: casos n (%), controles n (%), OR [IC 95%], RR [IC 95%], Fisher p y V de Cramér.
+
+        Parámetros
+        ----------
+        target / target_col : str, opcional (por defecto 'Mercurio_ug_L')
+            Desenlace binario o biomarcador cuantitativo a binarizar mediante corte de referencia.
+        factors / feature_cols / candidate_features : Sequence[str], opcional
+            Lista de factores de riesgo a contrastar.
+        target_cutoff : float, opcional
+            Punto de corte si target es cuantitativo (por defecto: 5.0 para Hg, 3.5 para Pb, 1.0 para Cd).
+        target_positive : Any, opcional
+            Valor específico que define la categoría positiva / casos.
+        labels_map : Dict[str, str], opcional
+            Mapeo de nombres legibles.
+        filepath : str, opcional
+            Ruta para guardar el reporte en HTML.
+
+        Retorna
+        -------
+        BivariateTableReport
+            Reporte con tabla estructurada de cribado de riesgo cualitativo.
+        """
+        if isinstance(self, pd.DataFrame):
+            return BivariateTables(self).qualitative_summary(
+                target=target, factors=factors, target_col=target_col,
+                feature_cols=feature_cols, candidate_features=candidate_features,
+                target_cutoff=target_cutoff, target_positive=target_positive,
+                labels_map=labels_map, filepath=filepath
+            )
+        t_col = target or target_col or "Mercurio_ug_L"
+        target_col = self._resolve_column(t_col)
+        fact_cols = factors if factors is not None else (feature_cols if feature_cols is not None else candidate_features)
+        s_tar = self.df[target_col]
+        is_num = pd.to_numeric(s_tar, errors="coerce").notna().sum() > (0.5 * len(s_tar.dropna()))
+
+        if target_positive is not None:
+            binary_tar = (s_tar.astype(str).str.strip().str.lower() == str(target_positive).strip().lower()).astype(int)
+            target_label = f"{self.get_label(target_col, labels_map)} = {target_positive}"
+        elif is_num:
+            cutoff = target_cutoff if target_cutoff is not None else DEFAULT_METAL_LIMITS.get(target_col, 5.0)
+            binary_tar = (pd.to_numeric(s_tar, errors="coerce") >= cutoff).astype(int)
+            target_label = f"{self.get_label(target_col, labels_map)} ≥ {cutoff:g}"
+        else:
+            u_tar = sorted(list(s_tar.dropna().unique()))
+            if len(u_tar) == 2:
+                binary_tar = (s_tar == u_tar[1]).astype(int)
+                target_label = f"{self.get_label(target_col, labels_map)} ({u_tar[1]})"
+            else:
+                binary_tar = (s_tar.astype(str).str.lower().isin(["si", "sí", "1", "true", "expuesto", "alto"])).astype(int)
+                target_label = self.get_label(target_col, labels_map)
+
+        if fact_cols is None:
+            cand_factors = [
+                "Sexo", "Es_Expuesto",
+                "Exposicion_Cualquier_Taller", "Exposicion_Cualquier_Industria", "Exposicion_Cualquier_Lugar_Riesgo",
+                "Exposicion_Talleres_carpinteria", "Exposicion_Talleres_latoneria", "Exposicion_Talleres_mecanico",
+                "Exposicion_Industrias_fabrica_metales", "Exposicion_Industrias_fabrica_productos_quimicos",
+                "Salud_Agua_pozo_profundo", "Salud_Agua_filtrada", "Salud_Agua_mineral_embotellada",
+                "Salud_Bombillos", "Salud_Fuma", "Salud_Techo", "Salud_Joyeria",
+                "Salud_Transporte_caminar", "Salud_Transporte_publico", "Salud_Transporte_vehiculo"
+            ]
+            cand_factors = [c for c in cand_factors if c in self.df.columns and c != target_col]
+        else:
+            cand_factors = [self._resolve_column(c) for c in self._normalize_columns(fact_cols) if self._resolve_column(c) in self.df.columns and self._resolve_column(c) != target_col]
+
+
+        records = []
+        for f_col in cand_factors:
+            s_f = self.df[f_col]
+            f_clean = s_f.dropna()
+            if f_clean.empty:
+                continue
+
+            str_vals = f_clean.astype(str).str.strip().str.lower()
+            if any(v in ("si", "sí", "1", "1.0", "true", "yes", "s") for v in str_vals):
+                pos_mask = str_vals.isin(["si", "sí", "1", "1.0", "true", "yes", "s"])
+                pos_label = "Sí"
+            elif any(v in ("masculino", "m", "hombre", "niño") for v in str_vals):
+                pos_mask = str_vals.isin(["masculino", "m", "hombre", "niño"])
+                pos_label = "Masculino"
+            else:
+                u = sorted(list(f_clean.unique()))
+                if len(u) == 2:
+                    pos_mask = (s_f == u[1])
+                    pos_label = str(u[1])
+                else:
+                    continue
+
+            bin_f = pos_mask.astype(int)
+            res_test = qualitative_association_test(bin_f, binary_tar)
+
+            if not res_test["is_2x2"]:
+                continue
+
+            ctab = res_test["contingency_table"]
+            n_exp_cases = int(ctab.loc[1, 1]) if 1 in ctab.index and 1 in ctab.columns else 0
+            n_exp_ctrl = int(ctab.loc[1, 0]) if 1 in ctab.index and 0 in ctab.columns else 0
+            n_noexp_cases = int(ctab.loc[0, 1]) if 0 in ctab.index and 1 in ctab.columns else 0
+            n_noexp_ctrl = int(ctab.loc[0, 0]) if 0 in ctab.index and 0 in ctab.columns else 0
+
+            tot_cases = n_exp_cases + n_noexp_cases
+            tot_ctrl = n_exp_ctrl + n_noexp_ctrl
+
+            pct_cases = (n_exp_cases / tot_cases) * 100 if tot_cases > 0 else 0.0
+            pct_ctrl = (n_exp_ctrl / tot_ctrl) * 100 if tot_ctrl > 0 else 0.0
+
+            or_val = res_test["odds_ratio"]
+            or_ci = res_test["or_ci"]
+            rr_val = res_test["relative_risk"]
+            rr_ci = res_test["rr_ci"]
+            p_fish = res_test["fisher_p"]
+            p_chi = res_test["chi2_yates_p"]
+            v_cramer = res_test["cramers_v"]
+
+            or_str = f"{or_val:.2f} [{or_ci[0]:.2f}, {or_ci[1]:.2f}]" if pd.notna(or_val) else "N/D"
+            rr_str = f"{rr_val:.2f} [{rr_ci[0]:.2f}, {rr_ci[1]:.2f}]" if pd.notna(rr_val) else "N/D"
+            p_fish_str = f"{p_fish:.4f}" if pd.notna(p_fish) and p_fish >= 0.0001 else ("<0.0001" if pd.notna(p_fish) else "N/D")
+            p_chi_str = f"{p_chi:.4f}" if pd.notna(p_chi) and p_chi >= 0.0001 else ("<0.0001" if pd.notna(p_chi) else "N/D")
+            v_str = f"{v_cramer:.3f}" if pd.notna(v_cramer) else "N/D"
+
+            if p_fish < 0.05 or (pd.notna(p_chi) and p_chi < 0.05):
+                p_fish_str = f"**{p_fish_str}**"
+                or_str = f"**{or_str}**"
+
+            var_label = self.get_label(f_col, labels_map)
+            records.append({
+                "Factor de Exposición": f"**{var_label}**",
+                "Categoría": pos_label,
+                "Casos n (%)": f"{n_exp_cases} ({pct_cases:.1f}%)",
+                "Controles n (%)": f"{n_exp_ctrl} ({pct_ctrl:.1f}%)",
+                "Odds Ratio [IC 95%]": or_str,
+                "Riesgo Relativo [IC 95%]": rr_str,
+                "Fisher (p)": p_fish_str,
+                "Chi² Yates (p)": p_chi_str,
+                "V de Cramér": v_str
+            })
+
+        res_df = pd.DataFrame(records)
+
+        spanners = [
+            {"label": "Factor y Condición", "columns": ["Factor de Exposición", "Categoría"]},
+            {"label": f"Frecuencia en {target_label}", "columns": ["Casos n (%)", "Controles n (%)"]},
+            {"label": "Estimación de Riesgo Epidemiológico", "columns": ["Odds Ratio [IC 95%]", "Riesgo Relativo [IC 95%]"]},
+            {"label": "Significancia y Asociación", "columns": ["Fisher (p)", "Chi² Yates (p)", "V de Cramér"]}
+        ]
+
+        notes = [
+            "Casos: Participantes que presentan el desenlace ('Sí' o sobre el umbral de referencia); Controles: Participantes sin el desenlace.",
+            "OR: Odds Ratio por máxima verosimilitud condicional con IC exacto al 95%; RR: Riesgo Relativo con corrección de Haldane-Anscombe.",
+            "Fisher (p): Valor p bilateral de la Prueba Exacta de Fisher (regla de oro en n reducida); Chi² Yates (p): Chi-cuadrado con corrección de continuidad.",
+            "En negrita se destacan las asociaciones y estimaciones con significancia estadística formal (p < 0.05)."
+        ]
+
+        title = f"Matriz Resumen de Factores de Riesgo vs. {target_label}"
+        subtitle = "Análisis bivariante de variables cualitativas mediante epidemiología analítica de contingencia"
+
+        report = BivariateTableReport(
+            df=res_df,
+            title=title,
+            subtitle=subtitle,
+            notes=notes,
+            filepath=filepath,
+            column_alignments={c: "l" if "Factor" in c else "c" for c in res_df.columns},
+            spanners=spanners
+        )
+        return report
+
+    # =========================================================================
+    # Pilar 2: Cuantitativa vs Cualitativa (Comparación de Carga Corporal entre Grupos)
+    # =========================================================================
+
+    def compare_groups(
+        self,
+        quantitative: Optional[Union[str, Sequence[str]]] = None,
+        group: Optional[str] = None,
+        method: str = "nonparametric",
+        group_col: Optional[str] = None,
+        continuous_cols: Optional[Union[str, Sequence[str]]] = None,
+        iqr_format: str = "range",
+        n_boot: int = 2000,
+        labels_map: Optional[Dict[str, str]] = None,
+        filepath: Optional[str] = None
+    ) -> BivariateTableReport:
+        """
+        Compara una variable cuantitativa (ej. concentración de mercurio o antropometría)
+        o conjunto de variables continuas entre categorías definidas por una variable cualitativa (2 grupos o >2 grupos).
+        Permite elegir entre enfoque no paramétrico (Mann-Whitney / Kruskal-Wallis + Hodges-Lehmann / Dunn)
+        o paramétrico (t de Welch / ANOVA + Hedges' g / Tukey HSD).
+
+        Parámetros
+        ----------
+        quantitative / continuous_cols : Union[str, Sequence[str]], opcional (por defecto 'Mercurio_ug_L')
+            Variable cuantitativa continua dependiente o lista de variables continuas. Admite alias ('Mercurio', 'hg', etc.).
+        group / group_col : str, opcional (por defecto 'Es_Expuesto')
+            Variable cualitativa de agrupación (ej. 'Sexo', 'Es_Expuesto', 'Sector', 'Alim_Pescados').
+        method : str, opcional (por defecto 'nonparametric')
+            Enfoque metodológico: 'nonparametric' (mediana, Mann-Whitney/Kruskal) o 'parametric' (media, Welch t/ANOVA).
+        iqr_format : str, opcional (por defecto 'range')
+            Formato de dispersión para la mediana: 'range' -> [Q1 - Q3] o 'width' -> [RIQ].
+        n_boot : int, opcional (por defecto 2000)
+            Réplicas Bootstrap para intervalos de confianza en análisis no paramétrico.
+        labels_map : Dict[str, str], opcional
+            Mapeo de nombres legibles.
+        filepath : str, opcional
+            Ruta para guardar el reporte en HTML.
+
+        Retorna
+        -------
+        BivariateTableReport
+            Reporte con tabla descriptiva y de contraste de hipótesis.
+        """
+        if isinstance(self, pd.DataFrame):
+            return BivariateTables(self).compare_groups(
+                quantitative=quantitative, group=group, method=method,
+                group_col=group_col, continuous_cols=continuous_cols,
+                iqr_format=iqr_format, n_boot=n_boot, labels_map=labels_map, filepath=filepath
+            )
+        q_param = quantitative if quantitative is not None else continuous_cols
+        if q_param is None:
+            q_param = "Mercurio_ug_L"
+        g_param = group or group_col or "Es_Expuesto"
+        g_col = self._resolve_column(g_param)
+        g_label = self.get_label(g_col, labels_map)
+        is_param = method.lower().startswith("param")
+
+        if isinstance(q_param, (list, tuple)) and len(q_param) > 1:
+            records = []
+            for col in q_param:
+                resolved_col = self._resolve_column(col)
+                if resolved_col not in self.df.columns:
+                    continue
+                single_rep = self.compare_groups(
+                    quantitative=resolved_col, group=g_param, method=method,
+                    iqr_format=iqr_format, n_boot=n_boot, labels_map=labels_map
+                )
+                df_single = single_rep.to_dataframe()
+                if df_single.empty:
+                    continue
+                v_label = self.get_label(resolved_col, labels_map)
+
+                if len(df_single) == 2 and "Dif. Medias [IC 95%]" in df_single.columns:
+                    r1, r0 = df_single.iloc[0], df_single.iloc[1]
+                    records.append({
+                        "Variable Cuantitativa": f"**{v_label}**",
+                        f"{r1['Categoría']} Media (DE)": r1["Media (DE)"],
+                        f"{r0['Categoría']} Media (DE)": r0["Media (DE)"],
+                        "Dif. Medias [IC 95%]": r1["Dif. Medias [IC 95%]"],
+                        "Hedges' g": r1["Hedges' g"],
+                        "Estadístico": f"t = {r1['t de Welch']}",
+                        "Valor p": r1["Valor p"]
+                    })
+                elif len(df_single) == 2 and "Hodges-Lehmann [IC 95%]" in df_single.columns:
+                    r1, r0 = df_single.iloc[0], df_single.iloc[1]
+                    records.append({
+                        "Variable Cuantitativa": f"**{v_label}**",
+                        f"{r1['Categoría']} Mediana [RIQ]": r1["Mediana [RIQ]"],
+                        f"{r0['Categoría']} Mediana [RIQ]": r0["Mediana [RIQ]"],
+                        "Hodges-Lehmann [IC 95%]": r1["Hodges-Lehmann [IC 95%]"],
+                        "r_rb [IC 95%]": r1["Efecto r_rb [IC 95%]"],
+                        "Estadístico": f"U = {r1['Mann-Whitney U']}",
+                        "Valor p": r1["Valor p"]
+                    })
+                else:
+                    first_row = df_single.iloc[0]
+                    rec = {"Variable Cuantitativa": f"**{v_label}**"}
+                    for _, row in df_single.iterrows():
+                        cat = str(row["Categoría"]).replace("*", "")
+                        val_col = "Media (DE)" if "Media (DE)" in row else "Mediana [RIQ]"
+                        rec[f"{cat} {val_col}"] = row[val_col]
+                    if "ANOVA F" in first_row:
+                        rec["Prueba"] = "ANOVA"
+                        rec["Efecto (η²)"] = first_row["Eta² (η²)"]
+                        rec["Estadístico"] = f"F = {first_row['ANOVA F']}"
+                        rec["Valor p"] = first_row["Valor p"]
+                    else:
+                        rec["Prueba"] = "Kruskal-Wallis"
+                        rec["Efecto (ε²)"] = first_row["Epsilon² (ε²)"]
+                        rec["Estadístico"] = f"H = {first_row['Kruskal-Wallis H']}"
+                        rec["Valor p"] = first_row["Valor p"]
+                    records.append(rec)
+
+            res_df = pd.DataFrame(records)
+            title = f"Comparación de Variables Cuantitativas según {g_label}"
+            subtitle = f"Enfoque {'no paramétrico' if not is_param else 'paramétrico'} para múltiples biomarcadores o covariables"
+            return BivariateTableReport(
+                df=res_df,
+                title=title,
+                subtitle=subtitle,
+                filepath=filepath,
+                column_alignments={c: "l" if "Variable" in c else "c" for c in res_df.columns}
+            )
+
+        q_target = q_param[0] if isinstance(q_param, (list, tuple)) else q_param
+        q_col = self._resolve_column(q_target)
+        df_sub = self.df.dropna(subset=[q_col, g_col]).copy()
+        q_vals = pd.to_numeric(df_sub[q_col], errors="coerce")
+        df_sub = df_sub[q_vals.notna()].copy()
+        df_sub[q_col] = q_vals[q_vals.notna()]
+
+
+        q_label = self.get_label(q_col, labels_map)
+        g_label = self.get_label(g_col, labels_map)
+
+        unique_groups = df_sub[g_col].unique()
+        k = len(unique_groups)
+
+        if k < 2:
+            return BivariateTableReport(
+                df=pd.DataFrame(),
+                title=f"Comparación de {q_label} según {g_label}",
+                subtitle="El factor de agrupación debe contener al menos 2 categorías distintas.",
+                filepath=filepath
+            )
+
+        posthoc_df = None
+
+        if k == 2:
+            g_sorted = sorted(list(unique_groups), key=lambda x: str(x))
+            g1_name, g0_name = g_sorted[1], g_sorted[0]
+            if str(g0_name).lower() in ("si", "sí", "1", "true") and str(g1_name).lower() in ("no", "0", "false"):
+                g1_name, g0_name = g0_name, g1_name
+
+            v1 = df_sub[df_sub[g_col] == g1_name][q_col].to_numpy()
+            v0 = df_sub[df_sub[g_col] == g0_name][q_col].to_numpy()
+
+            if method.lower().startswith("param"):
+                res_t = independent_t_test(v1, v0, equal_var=False)
+                t_stat = res_t["t_stat"]
+                p_val = res_t["p_val"]
+                diff_m = res_t["diff_means"]
+                ci_d = res_t["diff_means_ci"]
+                g_hedges = res_t["hedges_g"]
+                lev_p = res_t["levene_p"]
+
+                p_str = f"{p_val:.4f}" if pd.notna(p_val) and p_val >= 0.0001 else ("<0.0001" if pd.notna(p_val) else "N/D")
+                if pd.notna(p_val) and p_val < 0.05:
+                    p_str = f"**{p_str}**"
+
+                records = [
+                    {
+                        "Categoría": f"**{g1_name}**",
+                        "n": len(v1),
+                        "Media (DE)": f"{res_t['mean1']:.2f} ({res_t['std1']:.2f})",
+                        "Mín - Máx": f"{v1.min():.2f} - {v1.max():.2f}" if len(v1) > 0 else "N/D",
+                        "Dif. Medias [IC 95%]": f"{diff_m:.2f} [{ci_d[0]:.2f}, {ci_d[1]:.2f}]" if pd.notna(diff_m) else "N/D",
+                        "Hedges' g": f"{g_hedges:+.2f}" if pd.notna(g_hedges) else "N/D",
+                        "t de Welch": f"{t_stat:.2f}" if pd.notna(t_stat) else "N/D",
+                        "Valor p": p_str
+                    },
+                    {
+                        "Categoría": f"**{g0_name}**",
+                        "n": len(v0),
+                        "Media (DE)": f"{res_t['mean0']:.2f} ({res_t['std0']:.2f})",
+                        "Mín - Máx": f"{v0.min():.2f} - {v0.max():.2f}" if len(v0) > 0 else "N/D",
+                        "Dif. Medias [IC 95%]": "—",
+                        "Hedges' g": "—",
+                        "t de Welch": "—",
+                        "Valor p": "—"
+                    }
+                ]
+                res_df = pd.DataFrame(records)
+
+                spanners = [
+                    {"label": f"Factor: {g_label}", "columns": ["Categoría", "n"]},
+                    {"label": f"Parámetros de {q_label}", "columns": ["Media (DE)", "Mín - Máx"]},
+                    {"label": "Tamaño del Efecto e Inferencia Paramétrica", "columns": ["Dif. Medias [IC 95%]", "Hedges' g", "t de Welch", "Valor p"]}
+                ]
+                notes = [
+                    f"Media (DE): Media aritmética y desviación estándar paramétrica.",
+                    f"Hedges' g: Tamaño del efecto estandarizado corregido por sesgo de muestras pequeñas (n={len(df_sub)}).",
+                    f"Prueba de Levene de homocedasticidad: p = {lev_p:.4f}." if pd.notna(lev_p) else "",
+                    "Prueba t de Welch (no asume varianzas iguales)."
+                ]
+                notes = [n for n in notes if n]
+
+                title = f"Comparación Paramétrica de {q_label} según {g_label}"
+                subtitle = f"Prueba t de Welch y tamaño del efecto de Hedges ($g$) para 2 grupos independientes"
+
+            else:
+                res_mw = mann_whitney_test(v1, v0, n_boot=n_boot)
+                u_stat = res_mw["u_stat"]
+                p_val = res_mw["p_val"]
+                hl = res_mw["hl_shift"]
+                hl_ci = res_mw["hl_shift_ci"]
+                r_rb = res_mw["r_rb"]
+                r_ci = res_mw["r_rb_ci"]
+
+                p_str = f"{p_val:.4f}" if pd.notna(p_val) and p_val >= 0.0001 else ("<0.0001" if pd.notna(p_val) else "N/D")
+                if pd.notna(p_val) and p_val < 0.05:
+                    p_str = f"**{p_str}**"
+
+                q1_25, q1_75 = res_mw["iqr1"]
+                q0_25, q0_75 = res_mw["iqr0"]
+
+                if iqr_format == "range":
+                    med1_str = f"{res_mw['median1']:.2f} [{q1_25:.2f} - {q1_75:.2f}]"
+                    med0_str = f"{res_mw['median0']:.2f} [{q0_25:.2f} - {q0_75:.2f}]"
+                else:
+                    med1_str = f"{res_mw['median1']:.2f} [{q1_75 - q1_25:.2f}]"
+                    med0_str = f"{res_mw['median0']:.2f} [{q0_75 - q0_25:.2f}]"
+
+                hl_str = f"{hl:.2f} [{hl_ci[0]:.2f}, {hl_ci[1]:.2f}]" if pd.notna(hl) else "N/D"
+                r_str = f"{r_rb:+.2f} [{r_ci[0]:+.2f}, {r_ci[1]:+.2f}]" if pd.notna(r_rb) and pd.notna(r_ci[0]) else (f"{r_rb:+.2f}" if pd.notna(r_rb) else "N/D")
+
+                records = [
+                    {
+                        "Categoría": f"**{g1_name}**",
+                        "n": len(v1),
+                        "Mediana [RIQ]": med1_str,
+                        "Mín - Máx": f"{v1.min():.2f} - {v1.max():.2f}" if len(v1) > 0 else "N/D",
+                        "Hodges-Lehmann [IC 95%]": hl_str,
+                        "Efecto r_rb [IC 95%]": r_str,
+                        "Mann-Whitney U": f"{u_stat:.1f}" if pd.notna(u_stat) else "N/D",
+                        "Valor p": p_str
+                    },
+                    {
+                        "Categoría": f"**{g0_name}**",
+                        "n": len(v0),
+                        "Mediana [RIQ]": med0_str,
+                        "Mín - Máx": f"{v0.min():.2f} - {v0.max():.2f}" if len(v0) > 0 else "N/D",
+                        "Hodges-Lehmann [IC 95%]": "—",
+                        "Efecto r_rb [IC 95%]": "—",
+                        "Mann-Whitney U": "—",
+                        "Valor p": "—"
+                    }
+                ]
+                res_df = pd.DataFrame(records)
+
+                spanners = [
+                    {"label": f"Factor: {g_label}", "columns": ["Categoría", "n"]},
+                    {"label": f"Distribución de {q_label}", "columns": ["Mediana [RIQ]", "Mín - Máx"]},
+                    {"label": "Tamaño del Efecto e Inferencia no Paramétrica", "columns": ["Hodges-Lehmann [IC 95%]", "Efecto r_rb [IC 95%]", "Mann-Whitney U", "Valor p"]}
+                ]
+                notes = [
+                    "Mediana [RIQ]: Mediana y rango intercuartílico en escala natural.",
+                    "Hodges-Lehmann: Estimador de desplazamiento de localización de pseudomediana pareada con IC al 95%.",
+                    "r_rb: Correlación biserial por rangos (r_rb > 0 indica niveles superiores en el primer grupo).",
+                    "Mann-Whitney U: Prueba no paramétrica de suma de rangos de Wilcoxon-Mann-Whitney."
+                ]
+                title = f"Comparación no Paramétrica de {q_label} según {g_label}"
+                subtitle = f"Prueba U de Mann-Whitney, estimador de Hodges-Lehmann y correlación biserial por rangos"
+
+        else:
+            g_sorted = sorted(list(unique_groups), key=lambda x: str(x))
+            group_arrays = [df_sub[df_sub[g_col] == g_val][q_col].to_numpy() for g_val in g_sorted]
+
+            if method.lower().startswith("param"):
+                res_anova = anova_oneway_test(group_arrays, group_names=[str(g) for g in g_sorted])
+                f_stat = res_anova["f_stat"]
+                p_val = res_anova["p_val"]
+                eta_sq = res_anova["eta_sq"]
+                omega_sq = res_anova["omega_sq"]
+                lev_p = res_anova["levene_p"]
+                posthoc_df = res_anova["posthoc"]
+
+                p_str = f"{p_val:.4f}" if pd.notna(p_val) and p_val >= 0.0001 else ("<0.0001" if pd.notna(p_val) else "N/D")
+                if pd.notna(p_val) and p_val < 0.05:
+                    p_str = f"**{p_str}**"
+
+                records = []
+                first = True
+                for g_info in res_anova["group_stats"]:
+                    arr_g = df_sub[df_sub[g_col] == g_info["group"]][q_col].to_numpy()
+                    records.append({
+                        "Categoría": f"**{g_info['group']}**",
+                        "n": g_info["n"],
+                        "Media (DE)": f"{g_info['mean']:.2f} ({g_info['std']:.2f})",
+                        "Mín - Máx": f"{arr_g.min():.2f} - {arr_g.max():.2f}" if len(arr_g) > 0 else "N/D",
+                        "ANOVA F": f"{f_stat:.2f}" if first and pd.notna(f_stat) else ("—" if not first else "N/D"),
+                        "Eta² (η²)": f"{eta_sq:.3f}" if first and pd.notna(eta_sq) else ("—" if not first else "N/D"),
+                        "Omega² (ω²)": f"{omega_sq:.3f}" if first and pd.notna(omega_sq) else ("—" if not first else "N/D"),
+                        "Valor p": p_str if first else "—"
+                    })
+                    first = False
+                res_df = pd.DataFrame(records)
+
+                spanners = [
+                    {"label": f"Factor: {g_label}", "columns": ["Categoría", "n"]},
+                    {"label": f"Parámetros de {q_label}", "columns": ["Media (DE)", "Mín - Máx"]},
+                    {"label": "Inferencia ANOVA y Tamaño del Efecto", "columns": ["ANOVA F", "Eta² (η²)", "Omega² (ω²)", "Valor p"]}
+                ]
+                notes = [
+                    "ANOVA: Análisis de varianza de una vía de Fisher-Snedecor.",
+                    "Eta² (η²): Proporción de varianza explicada por el factor; Omega² (ω²): Estimador insesgado de la varianza explicada.",
+                    f"Prueba de Levene de homocedasticidad: p = {lev_p:.4f}." if pd.notna(lev_p) else "",
+                    "Comparaciones múltiples post-hoc calculadas mediante la prueba de Tukey HSD (disponible en posthoc_df)."
+                ]
+                notes = [n for n in notes if n]
+
+                title = f"Comparación Paramétrica de {q_label} según {g_label} (k={k})"
+                subtitle = "Análisis de varianza (ANOVA) de 1 vía y tamaño del efecto global"
+
+            else:
+                res_kw = kruskal_wallis_test(group_arrays, group_names=[str(g) for g in g_sorted])
+                h_stat = res_kw["h_stat"]
+                p_val = res_kw["p_val"]
+                eps_sq = res_kw["epsilon_sq"]
+                posthoc_df = dunn_posthoc_test(group_arrays, group_names=[str(g) for g in g_sorted], p_adjust="holm")
+
+                p_str = f"{p_val:.4f}" if pd.notna(p_val) and p_val >= 0.0001 else ("<0.0001" if pd.notna(p_val) else "N/D")
+                if pd.notna(p_val) and p_val < 0.05:
+                    p_str = f"**{p_str}**"
+
+                records = []
+                first = True
+                for g_info in res_kw["group_stats"]:
+                    arr_g = df_sub[df_sub[g_col] == g_info["group"]][q_col].to_numpy()
+                    q25, q75 = g_info["q25"], g_info["q75"]
+                    if iqr_format == "range":
+                        med_str = f"{g_info['median']:.2f} [{q25:.2f} - {q75:.2f}]"
+                    else:
+                        med_str = f"{g_info['median']:.2f} [{q75 - q25:.2f}]"
+
+                    records.append({
+                        "Categoría": f"**{g_info['group']}**",
+                        "n": g_info["n"],
+                        "Mediana [RIQ]": med_str,
+                        "Mín - Máx": f"{arr_g.min():.2f} - {arr_g.max():.2f}" if len(arr_g) > 0 else "N/D",
+                        "Kruskal-Wallis H": f"{h_stat:.2f}" if first and pd.notna(h_stat) else ("—" if not first else "N/D"),
+                        "Epsilon² (ε²)": f"{eps_sq:.3f}" if first and pd.notna(eps_sq) else ("—" if not first else "N/D"),
+                        "Valor p": p_str if first else "—"
+                    })
+                    first = False
+                res_df = pd.DataFrame(records)
+
+                spanners = [
+                    {"label": f"Factor: {g_label}", "columns": ["Categoría", "n"]},
+                    {"label": f"Distribución de {q_label}", "columns": ["Mediana [RIQ]", "Mín - Máx"]},
+                    {"label": "Inferencia no Paramétrica y Tamaño de Efecto", "columns": ["Kruskal-Wallis H", "Epsilon² (ε²)", "Valor p"]}
+                ]
+                notes = [
+                    "Kruskal-Wallis H: Prueba no paramétrica de comparación de k grupos independientes sobre rangos.",
+                    "Epsilon² (ε²): Coeficiente de tamaño de efecto para Kruskal-Wallis acotado en [0, 1].",
+                    "Comparaciones múltiples por pares evaluadas mediante la prueba post-hoc de Dunn con corrección de Holm (disponible en posthoc_df)."
+                ]
+                title = f"Comparación no Paramétrica de {q_label} según {g_label} (k={k})"
+                subtitle = "Prueba de Kruskal-Wallis y tamaño de efecto Epsilon-Cuadrado"
+
+        col_alignments = {c: "c" for c in res_df.columns}
+        col_alignments["Categoría"] = "l"
+
+        report = BivariateTableReport(
+            df=res_df,
+            title=title,
+            subtitle=subtitle,
+            notes=notes,
+            filepath=filepath,
+            column_alignments=col_alignments,
+            spanners=spanners,
+            posthoc_df=posthoc_df
+        )
+        return report
+
+    # =========================================================================
+    # Pilar 3: Cuantitativa vs Cuantitativa (Gradientes Continuos y Co-exposición)
+    # =========================================================================
+
+    def correlation_analysis(
+        self,
+        x: Optional[Union[str, Sequence[str]]] = None,
+        y: Optional[str] = None,
+        target: Optional[str] = None,
+        target_col: Optional[str] = None,
+        continuous_cols: Optional[Union[str, Sequence[str]]] = None,
+        method: str = "nonparametric",
+        n_boot: int = 2000,
+        labels_map: Optional[Dict[str, str]] = None,
+        filepath: Optional[str] = None
+    ) -> BivariateTableReport:
+        """
+        Evalúa la correlación y dependencia funcional entre dos variables cuantitativas continuas
+        o una lista de variables continuas frente a un biomarcador diana.
+        Enfoque no paramétrico: Spearman rho_s (con IC 95% Bootstrap) y Kendall tau_b.
+        Enfoque paramétrico: Pearson r (con IC 95% Fisher z), R² y parámetros de regresión lineal simple.
+        """
+        if isinstance(self, pd.DataFrame):
+            return BivariateTables(self).correlation_analysis(
+                x=x, y=y, target=target, target_col=target_col,
+                continuous_cols=continuous_cols, method=method,
+                n_boot=n_boot, labels_map=labels_map, filepath=filepath
+            )
+        col_y = y or target or target_col or "Mercurio_ug_L"
+        col_x = x if x is not None else continuous_cols
+        if col_x is None:
+            raise ValueError("Debe especificar la variable cuantitativa o lista de variables continuas a correlacionar.")
+
+        y_col = self._resolve_column(col_y)
+        y_label = self.get_label(y_col, labels_map)
+        is_param = method.lower().startswith("param")
+
+        if isinstance(col_x, (list, tuple)) and len(col_x) > 1:
+            records = []
+            for item in col_x:
+                x_resolved = self._resolve_column(item)
+                if x_resolved not in self.df.columns or x_resolved == y_col:
+                    continue
+                single_rep = self.correlation_analysis(
+                    x=x_resolved, y=y_col, method=method, n_boot=n_boot, labels_map=labels_map
+                )
+                df_s = single_rep.to_dataframe()
+                if not df_s.empty:
+                    records.append(df_s.iloc[0].to_dict())
+
+            res_df = pd.DataFrame(records)
+            title = f"Matriz de Correlación vs. {y_label}"
+            subtitle = f"Evaluación de gradientes continuos mediante enfoque {'no paramétrico' if not is_param else 'paramétrico'}"
+            return BivariateTableReport(
+                df=res_df,
+                title=title,
+                subtitle=subtitle,
+                filepath=filepath,
+                column_alignments={c: "l" if "Variable" in c else "c" for c in res_df.columns}
+            )
+
+        single_x = col_x[0] if isinstance(col_x, (list, tuple)) else col_x
+        x_col = self._resolve_column(single_x)
+
+        df_sub = self.df[[x_col, y_col]].dropna().apply(pd.to_numeric, errors="coerce").dropna()
+        n_valid = len(df_sub)
+
+        x_label = self.get_label(x_col, labels_map)
+
+        if n_valid < 3:
+            return BivariateTableReport(
+                df=pd.DataFrame(),
+                title=f"Correlación entre {x_label} y {y_label}",
+                subtitle="Datos insuficientes (n < 3).",
+                filepath=filepath
+            )
+
+        vx = df_sub[x_col].to_numpy()
+        vy = df_sub[y_col].to_numpy()
+
+        if is_param:
+            res_p = pearson_correlation(vx, vy)
+            r_val = res_p["r"]
+            p_val = res_p["p_val"]
+            ci_l, ci_h = res_p["ci_low"], res_p["ci_high"]
+            r2 = res_p["r_squared"]
+            slope = res_p["slope"]
+            intercept = res_p["intercept"]
+
+            p_str = f"{p_val:.4f}" if p_val >= 0.0001 else "<0.0001"
+            if p_val < 0.05:
+                p_str = f"**{p_str}**"
+
+            records = [{
+                "Variable X": f"**{x_label}**",
+                "Variable Y": f"**{y_label}**",
+                "Metodo": "Pearson",
+                "n Válido": n_valid,
+                "Pearson (r)": f"{r_val:+.3f}",
+                "IC 95% Fisher z": f"[{ci_l:+.2f}, {ci_h:+.2f}]" if pd.notna(ci_l) else "N/D",
+                "R² (Varianza Explicada)": f"{r2:.3f}",
+                "Pendiente (Beta)": f"{slope:+.3f}",
+                "Intercepto": f"{intercept:.2f}",
+                "Ecuación Regresión": f"Y = {intercept:.2f} + {slope:+.3f}·X",
+                "Valor p": p_str
+            }]
+            res_df = pd.DataFrame(records)
+
+            spanners = [
+                {"label": "Variables Evaluadas", "columns": ["Variable X", "Variable Y", "Metodo", "n Válido"]},
+                {"label": "Asociación Lineal de Pearson", "columns": ["Pearson (r)", "IC 95% Fisher z", "R² (Varianza Explicada)"]},
+                {"label": "Modelo Lineal e Inferencia", "columns": ["Pendiente (Beta)", "Intercepto", "Ecuación Regresión", "Valor p"]}
+            ]
+            notes = [
+                "Pearson (r): Coeficiente de correlación producto-momento que mide la fuerza y sentido de la relación lineal.",
+                "IC 95% Fisher z: Intervalo de confianza asintótico al 95% obtenido mediante transformación z de Fisher.",
+                "R²: Coeficiente de determinación lineal (proporción de varianza explicada).",
+                "Regresión lineal simple estimada por mínimos cuadrados ordinarios (MCO)."
+            ]
+            title = f"Correlación Lineal Paramétrica: {x_label} vs. {y_label}"
+            subtitle = f"Coeficiente de Pearson ($r$), intervalo de Fisher $z$ y parámetros de regresión (n={n_valid})"
+
+        else:
+            res_sp = spearman_correlation(vx, vy, n_boot=n_boot)
+            res_kt = kendall_correlation(vx, vy)
+
+            rho = res_sp["rho"]
+            p_sp = res_sp["p_val"]
+            ci_l, ci_h = res_sp["ci_low"], res_sp["ci_high"]
+            tau = res_kt["tau"]
+            p_kt = res_kt["p_val"]
+
+            p_sp_str = f"{p_sp:.4f}" if p_sp >= 0.0001 else "<0.0001"
+            p_kt_str = f"{p_kt:.4f}" if p_kt >= 0.0001 else "<0.0001"
+            if p_sp < 0.05:
+                p_sp_str = f"**{p_sp_str}**"
+            if p_kt < 0.05:
+                p_kt_str = f"**{p_kt_str}**"
+
+            records = [{
+                "Variable X": f"**{x_label}**",
+                "Variable Y": f"**{y_label}**",
+                "Metodo": "Spearman / Kendall",
+                "n Válido": n_valid,
+                "Spearman (ρₛ)": f"{rho:+.3f}",
+                "IC 95% Bootstrap": f"[{ci_l:+.2f}, {ci_h:+.2f}]" if pd.notna(ci_l) else "N/D",
+                "Spearman p": p_sp_str,
+                "Kendall (τ_b)": f"{tau:+.3f}" if pd.notna(tau) else "N/D",
+                "Kendall p": p_kt_str
+            }]
+            res_df = pd.DataFrame(records)
+
+            spanners = [
+                {"label": "Variables Evaluadas", "columns": ["Variable X", "Variable Y", "Metodo", "n Válido"]},
+                {"label": "Correlación de Rangos de Spearman", "columns": ["Spearman (ρₛ)", "IC 95% Bootstrap", "Spearman p"]},
+                {"label": "Correlación de Kendall", "columns": ["Kendall (τ_b)", "Kendall p"]}
+            ]
+            notes = [
+                "Spearman (ρₛ): Coeficiente de correlación no paramétrica de Spearman para dependencia monótona.",
+                "IC 95% Bootstrap: Intervalo de confianza obtenido mediante remuestreo bootstrap no paramétrico (2,000 réplicas).",
+                "Kendall (τ_b): Coeficiente tau-b de Kendall, especialmente robusto para muestras pequeñas (n=20) y presencia de empates.",
+                "En negrita se destacan las correlaciones con significancia estadística formal (p < 0.05)."
+            ]
+            title = f"Correlación no Paramétrica: {x_label} vs. {y_label}"
+            subtitle = f"Dependencia monótona evaluada mediante coeficientes de Spearman ($\rho$) y Kendall ($\tau$) (n={n_valid})"
+
+        col_alignments = {c: "c" for c in res_df.columns}
+        col_alignments["Variable X"] = "l"
+        col_alignments["Variable Y"] = "l"
+
+        report = BivariateTableReport(
+            df=res_df,
+            title=title,
+            subtitle=subtitle,
+            notes=notes,
+            filepath=filepath,
+            column_alignments=col_alignments,
+            spanners=spanners
+        )
+        return report
+
+
+    # =========================================================================
+    # Transición Hacia el Análisis Multivariable (Screening y Selección)
+    # =========================================================================
+
+    def multivariate_screening(
+        self,
+        target: Optional[str] = None,
+        candidate_features: Optional[Sequence[str]] = None,
+        target_col: Optional[str] = None,
+        candidates: Optional[Sequence[str]] = None,
+        feature_cols: Optional[Sequence[str]] = None,
+        method: str = "nonparametric",
+        screening_p_threshold: float = 0.20,
+        fdr_alpha: Optional[float] = None,
+        labels_map: Optional[Dict[str, str]] = None,
+        filepath: Optional[str] = None
+    ) -> BivariateTableReport:
+        """
+        Batería integral de tamizaje bivariante (*screening*) para preseleccionar factores de riesgo
+        antes de ingresar a modelos multivariables (regresión lineal múltiple o regresión logística).
+        """
+        if isinstance(self, pd.DataFrame):
+            return BivariateTables(self).multivariate_screening(
+                target=target, candidate_features=candidate_features,
+                target_col=target_col, candidates=candidates, feature_cols=feature_cols,
+                method=method, screening_p_threshold=screening_p_threshold,
+                fdr_alpha=fdr_alpha, labels_map=labels_map, filepath=filepath
+            )
+        t_col = target or target_col or "Mercurio_ug_L"
+        target_col = self._resolve_column(t_col)
+        c_feats = candidate_features if candidate_features is not None else (candidates if candidates is not None else feature_cols)
+        p_threshold = fdr_alpha if fdr_alpha is not None else screening_p_threshold
+
+        s_tar = self.df[target_col]
+        is_tar_num = pd.to_numeric(s_tar, errors="coerce").notna().sum() > (0.5 * len(s_tar.dropna()))
+
+        if c_feats is None:
+            cand_features = [
+                "Edad", "Sexo", "Peso_kg", "Altura_cm", "IMC", "Sector", "Institucion", "Es_Expuesto", "Score_Riesgo",
+                "Exposicion_Cualquier_Taller", "Exposicion_Cualquier_Industria", "Exposicion_Cualquier_Lugar_Riesgo",
+                "Exposicion_Talleres_carpinteria", "Exposicion_Talleres_latoneria", "Exposicion_Talleres_mecanico",
+                "Exposicion_Industrias_fabrica_metales", "Exposicion_Industrias_fabrica_productos_quimicos",
+                "Salud_Agua_pozo_profundo", "Salud_Agua_filtrada", "Salud_Agua_mineral_embotellada",
+                "Salud_Bombillos", "Salud_Fuma", "Salud_Techo", "Salud_Joyeria",
+                "Salud_Transporte_caminar", "Salud_Transporte_publico", "Salud_Transporte_vehiculo",
+                "Alim_Pescados", "Alim_Carnes", "Alim_Lacteos", "Alim_Vegetales"
+            ]
+            cand_features = [c for c in cand_features if c in self.df.columns and c != target_col]
+        else:
+            cand_features = [self._resolve_column(c) for c in self._normalize_columns(c_feats) if self._resolve_column(c) in self.df.columns and self._resolve_column(c) != target_col]
+
+        raw_records = []
+        p_values = []
+        is_param = method.lower().startswith("param")
+
+        for feat in cand_features:
+            s_f = self.df[feat].dropna()
+            if len(s_f) == 0:
+                continue
+
+            is_f_num = pd.to_numeric(s_f, errors="coerce").notna().sum() > (0.8 * len(s_f))
+            u_f = s_f.unique()
+            k_f = len(u_f)
+
+            rel_type = ""
+            test_name = ""
+            metric_name = ""
+            effect_val = np.nan
+            p_val = np.nan
+
+            df_pair = self.df[[target_col, feat]].dropna()
+            n_eff = len(df_pair)
+            if n_eff < 3:
+                continue
+
+            if is_tar_num:
+                y_arr = pd.to_numeric(df_pair[target_col], errors="coerce").to_numpy()
+
+                if is_f_num and k_f > 5:
+                    rel_type = "Cuant vs Cuant"
+                    x_arr = pd.to_numeric(df_pair[feat], errors="coerce").to_numpy()
+                    if is_param:
+                        res_p = pearson_correlation(x_arr, y_arr)
+                        test_name = "Pearson"
+                        metric_name = "r"
+                        effect_val = res_p["r"]
+                        p_val = res_p["p_val"]
+                    else:
+                        res_s = spearman_correlation(x_arr, y_arr, n_boot=500)
+                        test_name = "Spearman"
+                        metric_name = "ρₛ"
+                        effect_val = res_s["rho"]
+                        p_val = res_s["p_val"]
+
+                elif k_f == 2:
+                    rel_type = "Cuant vs Cual (2g)"
+                    u_sorted = sorted(list(u_f), key=lambda x: str(x))
+                    g1_val, g0_val = u_sorted[1], u_sorted[0]
+                    v1 = df_pair[df_pair[feat] == g1_val][target_col].to_numpy()
+                    v0 = df_pair[df_pair[feat] == g0_val][target_col].to_numpy()
+
+                    if is_param:
+                        res_t = independent_t_test(v1, v0)
+                        test_name = "Welch t"
+                        metric_name = "Hedges' g"
+                        effect_val = res_t["hedges_g"]
+                        p_val = res_t["p_val"]
+                    else:
+                        res_mw = mann_whitney_test(v1, v0, n_boot=500)
+                        test_name = "Mann-Whitney"
+                        metric_name = "r_rb"
+                        effect_val = res_mw["r_rb"]
+                        p_val = res_mw["p_val"]
+
+                else:
+                    rel_type = "Cuant vs Cual (>2g)"
+                    group_arrays = [df_pair[df_pair[feat] == g_val][target_col].to_numpy() for g_val in u_f]
+                    if is_param:
+                        res_a = anova_oneway_test(group_arrays)
+                        test_name = "ANOVA"
+                        metric_name = "Eta²"
+                        effect_val = res_a["eta_sq"]
+                        p_val = res_a["p_val"]
+                    else:
+                        res_k = kruskal_wallis_test(group_arrays)
+                        test_name = "Kruskal-Wallis"
+                        metric_name = "Epsilon²"
+                        effect_val = res_k["epsilon_sq"]
+                        p_val = res_k["p_val"]
+
+            else:
+                tar_arr = df_pair[target_col]
+                if is_f_num:
+                    rel_type = "Cual vs Cuant"
+                    u_tar = list(tar_arr.unique())
+                    if len(u_tar) == 2:
+                        v1 = df_pair[df_pair[target_col] == u_tar[1]][feat].to_numpy()
+                        v0 = df_pair[df_pair[target_col] == u_tar[0]][feat].to_numpy()
+                        if is_param:
+                            res_t = independent_t_test(v1, v0)
+                            test_name = "Welch t"
+                            metric_name = "Hedges' g"
+                            effect_val = res_t["hedges_g"]
+                            p_val = res_t["p_val"]
+                        else:
+                            res_mw = mann_whitney_test(v1, v0, n_boot=500)
+                            test_name = "Mann-Whitney"
+                            metric_name = "r_rb"
+                            effect_val = res_mw["r_rb"]
+                            p_val = res_mw["p_val"]
+                else:
+                    rel_type = "Cual vs Cual"
+                    res_q = qualitative_association_test(df_pair[feat], df_pair[target_col])
+                    if res_q["is_2x2"]:
+                        test_name = "Fisher Exacto" if not is_param else "Chi² Yates"
+                        metric_name = "Odds Ratio"
+                        effect_val = res_q["odds_ratio"]
+                        p_val = res_q["fisher_p"] if not is_param else res_q["chi2_yates_p"]
+                    else:
+                        test_name = "Chi² Pearson"
+                        metric_name = "V de Cramér"
+                        effect_val = res_q["cramers_v"]
+                        p_val = res_q["chi2_p"]
+
+            raw_records.append({
+                "feat_raw": feat,
+                "rel_type": rel_type,
+                "test_name": test_name,
+                "metric_name": metric_name,
+                "effect_val": effect_val,
+                "p_val": p_val,
+                "n_eff": n_eff
+            })
+            p_values.append(p_val if pd.notna(p_val) else 1.0)
+
+        adj_p = adjust_pvalues(p_values, method="fdr_bh")
+
+        final_rows = []
+        for rec, padj in zip(raw_records, adj_p):
+            p_raw = rec["p_val"]
+            eff = rec["effect_val"]
+            feat = rec["feat_raw"]
+            var_label = self.get_label(feat, labels_map)
+
+            eff_abs = abs(eff) if pd.notna(eff) else 0.0
+            if rec["metric_name"] == "Odds Ratio" and pd.notna(eff):
+                eff_abs = max(eff, 1.0 / eff) if eff > 0 else 0.0
+
+            if (pd.notna(p_raw) and p_raw < 0.05) or (padj < 0.10) or (eff_abs >= 0.40 and rec["metric_name"] != "Odds Ratio") or (rec["metric_name"] == "Odds Ratio" and eff_abs >= 3.0):
+                prio = "Prioridad Alta"
+                criterio = "Efecto sustancial y/o significancia formal"
+            elif pd.notna(p_raw) and p_raw < p_threshold:
+                prio = "Prioridad Intermedia"
+                criterio = f"Candidato a modelo multivariable (p < {p_threshold:.2f})"
+            else:
+                prio = "Baja Prioridad"
+                criterio = "Efecto débil o sin evidencia de asociación"
+
+            p_raw_str = f"{p_raw:.4f}" if pd.notna(p_raw) and p_raw >= 0.0001 else ("<0.0001" if pd.notna(p_raw) else "N/D")
+            p_fdr_str = f"{padj:.4f}" if pd.notna(padj) and padj >= 0.0001 else ("<0.0001" if pd.notna(padj) else "N/D")
+
+            if pd.notna(p_raw) and p_raw < 0.05:
+                p_raw_str = f"**{p_raw_str}**"
+            if pd.notna(padj) and padj < 0.10:
+                p_fdr_str = f"**{p_fdr_str}**"
+
+            eff_str = f"{eff:+.2f}" if pd.notna(eff) and rec["metric_name"] != "Odds Ratio" else (f"{eff:.2f}" if pd.notna(eff) else "N/D")
+
+            final_rows.append({
+                "Variable Predictora": f"**{var_label}**",
+                "Tipo de Relación": rec["rel_type"],
+                "Prueba": rec["test_name"],
+                "Métrica": rec["metric_name"],
+                "Tamaño Efecto": eff_str,
+                "p (Crudo)": p_raw_str,
+                "FDR p-valor (BH)": p_fdr_str,
+                "Prioridad Multivariable": f"**{prio}**" if prio == "Prioridad Alta" else prio,
+                "Elegibilidad Multivariable": f"**{prio}**" if prio == "Prioridad Alta" else prio,
+                "Criterio": criterio,
+                "_raw_p": p_raw if pd.notna(p_raw) else 1.0,
+                "_prio_ord": 0 if prio == "Prioridad Alta" else (1 if prio == "Prioridad Intermedia" else 2),
+                "_feat": feat
+            })
+
+        if final_rows:
+            final_rows.sort(key=lambda r: (r["_prio_ord"], r["_raw_p"]))
+
+        # Asignar Rank y calcular Colinealidad (rho max con predictores de mayor rango)
+        for i, row in enumerate(final_rows, start=1):
+            row["Rank"] = i
+            feat_i = row["_feat"]
+            if i == 1:
+                row["Colinealidad (rho max)"] = "Ref / —"
+            else:
+                higher_feats = [r["_feat"] for r in final_rows[:i-1]]
+                max_c = 0.0
+                for hf in higher_feats:
+                    s1 = pd.to_numeric(self.df[feat_i], errors="coerce")
+                    s2 = pd.to_numeric(self.df[hf], errors="coerce")
+                    vmask = s1.notna() & s2.notna()
+                    if vmask.sum() >= 4 and s1[vmask].nunique() > 1 and s2[vmask].nunique() > 1:
+                        try:
+                            if not is_param:
+                                cv, _ = stats.spearmanr(s1[vmask], s2[vmask])
+                            else:
+                                cv, _ = stats.pearsonr(s1[vmask], s2[vmask])
+                            if pd.notna(cv):
+                                max_c = max(max_c, abs(float(cv)))
+                        except Exception:
+                            pass
+
+                row["Colinealidad (rho max)"] = f"{max_c:.2f}" if max_c > 0 else "0.00"
+
+        res_df = pd.DataFrame(final_rows)
+
+        top_feats = [r["_feat"] for r in final_rows if r["_prio_ord"] <= 1][:8]
+        collin_df = pd.DataFrame()
+        if len(top_feats) >= 2:
+            collin_df = collinearity_matrix(self.df, top_feats, method="spearman" if not is_param else "pearson")
+
+        clean_df = res_df.drop(columns=["_raw_p", "_prio_ord", "_feat"])
+
+        target_label = self.get_label(target_col, labels_map)
+        title = f"Matriz Maestra de Tamizaje Bivariante (*Screening*) vs. {target_label}"
+        subtitle = f"Batería epidemiológica completa {'no paramétrica' if not is_param else 'paramétrica'} con control FDR (Benjamini-Hochberg)"
+
+        spanners = [
+            {"label": "Jerarquía y Predictor", "columns": ["Rank", "Variable Predictora", "Tipo de Relación"]},
+            {"label": "Prueba y Magnitud", "columns": ["Prueba", "Métrica", "Tamaño Efecto"]},
+            {"label": "Significancia Estadística", "columns": ["p (Crudo)", "FDR p-valor (BH)"]},
+            {"label": "Decisión para Modelado Multivariable", "columns": ["Prioridad Multivariable", "Colinealidad (rho max)", "Criterio"]}
+        ]
+
+        notes = [
+            f"Umbral de inclusión para análisis multivariable: p (Crudo) < {p_threshold:.2f} (criterio estándar de Hosmer-Lemeshow).",
+            "FDR p-valor (BH): Valor p ajustado mediante el procedimiento de Benjamini-Hochberg para controlar la tasa de falsos descubrimientos ante pruebas múltiples.",
+            "Colinealidad (rho max): Correlación máxima absoluta con predictores precedentes de mayor prioridad para identificar redundancia.",
+            "Regla de Parsimonia para n=20: En la muestra analítica disponible, el modelo multivariable final (regresión lineal o logística) no debe incorporar más de 2 a 3 predictores simultáneos para preservar los grados de libertad.",
+            "En hojas adicionales ('Colinealidad_Top') se compendia la matriz de correlación entre los predictores preseleccionados."
+        ]
+
+        extra_sheets = {}
+        if not collin_df.empty:
+            extra_sheets["Colinealidad_Top"] = collin_df
+
+        report = BivariateTableReport(
+            df=clean_df,
+            title=title,
+            subtitle=subtitle,
+            notes=notes,
+            filepath=filepath,
+            column_alignments={c: "l" if "Variable" in c or "Criterio" in c else "c" for c in clean_df.columns},
+            spanners=spanners,
+            extra_sheets=extra_sheets
+        )
+        return report
+
+    # Aliases
+    coexposure_matrix = metal_correlations
+
+
+# =============================================================================
+
+# Funciones de Acceso Directo a Nivel de Módulo
+# =============================================================================
+
+def qualitative_association(df: pd.DataFrame, *args: Any, **kwargs: Any) -> BivariateTableReport:
+    """Función de acceso directo para análisis de asociación cualitativa (Pilar 1)."""
+    return BivariateTables(df).qualitative_association(*args, **kwargs)
+
+
+def qualitative_summary(df: pd.DataFrame, *args: Any, **kwargs: Any) -> BivariateTableReport:
+    """Función de acceso directo para matriz resumen de factores cualitativos (Pilar 1)."""
+    return BivariateTables(df).qualitative_summary(*args, **kwargs)
+
+
+def compare_groups(df: pd.DataFrame, *args: Any, **kwargs: Any) -> BivariateTableReport:
+    """Función de acceso directo para contraste de grupos paramétrico o no paramétrico (Pilar 2)."""
+    return BivariateTables(df).compare_groups(*args, **kwargs)
+
+
+def correlation_analysis(df: pd.DataFrame, *args: Any, **kwargs: Any) -> BivariateTableReport:
+    """Función de acceso directo para análisis de correlación continuo paramétrico o no paramétrico (Pilar 3)."""
+    return BivariateTables(df).correlation_analysis(*args, **kwargs)
+
+
+def multivariate_screening(df: pd.DataFrame, *args: Any, **kwargs: Any) -> BivariateTableReport:
+    """Función de acceso directo para tamizaje multivariable con control FDR (Transición Multivariable)."""
+    return BivariateTables(df).multivariate_screening(*args, **kwargs)
+
 
 __all__ = [
     "BivariateTableReport",
     "BivariateTables",
+    "qualitative_association",
+    "qualitative_summary",
+    "compare_groups",
+    "correlation_analysis",
+    "multivariate_screening",
 ]
+

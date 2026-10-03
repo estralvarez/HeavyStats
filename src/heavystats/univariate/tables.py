@@ -601,13 +601,16 @@ class UnivariateTables:
         lods: Optional[Dict[str, float]] = None,
         permissible_limits: Optional[Dict[str, float]] = None,
         percentiles: Optional[List[int]] = None,
+        iqr_format: str = "range",
         labels_map: Optional[Dict[str, str]] = None,
-        filepath: Optional[str] = None
+        filepath: Optional[str] = None,
+        metals: Optional[Union[str, Sequence[str]]] = None
     ) -> UnivariateTableReport:
         """
         Calcula estadísticas descriptivas y toxicológicas para concentraciones de metales pesados en sangre.
         Incluye porcentaje detectable (>=LOD), porcentaje que supera el límite permisible de referencia,
-        media geométrica con su desviación estándar geométrica (GSD), y percentiles poblacionales.
+        intervalo observado (mín - máx), mediana con rango intercuartílico (RIQ), media aritmética con
+        desviación estándar (DE), y percentiles poblacionales.
 
         Parámetros
         ----------
@@ -620,16 +623,23 @@ class UnivariateTables:
             Límites permisibles de referencia toxicológica (CDC/OMS/EPA).
         percentiles : List[int], opcional
             Percentiles a reportar (por defecto: 5, 10, 25, 50, 75, 90, 95).
+        iqr_format : str, opcional (por defecto "range")
+            Formato del rango intercuartílico para la mediana: "range" -> [Q1 - Q3], "width" -> [RIQ], o "none".
         labels_map : Dict[str, str], opcional
             Mapeo de nombres legibles para los encabezados.
         filepath : str, opcional
             Ruta de archivo para guardar el reporte en HTML (.html).
+        metals : Union[str, Sequence[str]], opcional
+            Alias para columns.
 
         Retorna
         -------
         UnivariateTableReport
             Reporte con DataFrame, renderizado interactivo en HTML y exportación a Excel/CSV.
         """
+        if columns is None and metals is not None:
+            columns = metals
+
         if columns is None:
             resolved_cols = ["Plomo_ug_dL", "Mercurio_ug_L", "Cadmio_ug_L"]
         else:
@@ -659,6 +669,9 @@ class UnivariateTables:
         subscript_map = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
         perc_col_names = [f"P{str(p).translate(subscript_map)}" for p in percentiles]
 
+        med_col = "Mediana [RIQ]" if iqr_format in ("range", "width") else "Mediana"
+        mean_col = "Media (DE)" if iqr_format in ("range", "width") else "Media"
+
         records = []
         for col in resolved_cols:
             if col not in self.df.columns:
@@ -685,14 +698,22 @@ class UnivariateTables:
             val_min = float(data_clean.min())
             val_max = float(data_clean.max())
 
-            # Media geométrica y desviación estándar geométrica (GSD en negrita entre paréntesis)
-            if (data_clean > 0).all():
-                log_vals = np.log(data_clean)
-                geo_mean = float(np.exp(log_vals.mean()))
-                gsd = float(np.exp(log_vals.std()))
-                geo_mean_str = f"{geo_mean:.2f} **({gsd:.2f})**"
+            mean = float(data_clean.mean())
+            std = float(data_clean.std())
+            median = float(data_clean.median())
+            q25 = float(data_clean.quantile(0.25))
+            q75 = float(data_clean.quantile(0.75))
+            iqr = q75 - q25
+
+            if iqr_format == "range":
+                median_str = f"{median:.2f} [{q25:.2f} - {q75:.2f}]"
+                mean_str = f"{mean:.2f} ({std:.2f})"
+            elif iqr_format == "width":
+                median_str = f"{median:.2f} [{iqr:.2f}]"
+                mean_str = f"{mean:.2f} ({std:.2f})"
             else:
-                geo_mean_str = "No calc."
+                median_str = f"{median:.2f}"
+                mean_str = f"{mean:.2f}"
 
             perc_vals = np.percentile(data_clean, percentiles)
             var_label = self.get_label(col, labels_map)
@@ -703,7 +724,8 @@ class UnivariateTables:
                 "% Detectable": f"{pct_detectable:.1f}%",
                 "% > Límite": exceed_str,
                 "Mín - Máx": f"{val_min:.2f} - {val_max:.2f}",
-                "Media Geom. (GSD)": geo_mean_str
+                med_col: median_str,
+                mean_col: mean_str
             }
 
             for p_name, val in zip(perc_col_names, perc_vals):
@@ -716,15 +738,29 @@ class UnivariateTables:
         spanners = [
             {"label": "Identificación y Muestra", "columns": ["Metal", "N"]},
             {"label": "Criterios Analíticos y Sanitarios", "columns": ["% Detectable", "% > Límite"]},
-            {"label": "Conc. Global", "columns": ["Mín - Máx", "Media Geom. (GSD)"]},
+            {"label": "Conc. Global", "columns": ["Mín - Máx", med_col, mean_col]},
             {"label": "Percentiles de Conc.", "columns": perc_col_names}
         ]
 
-        notes = [
-            "LOD: Límite de Detección analítico (≥ LOD); GSD: Desviación Estándar Geométrica.",
-            "% > Límite: Porcentaje de la muestra que iguala o supera el valor de referencia en sangre (CDC/OMS/EPA). Entre paréntesis en negrita se indica el valor límite (µg/dL para Pb, µg/L para Hg y Cd).",
-            "Media Geom. (GSD): Media geométrica con su desviación estándar geométrica (factor multiplicativo) entre paréntesis en negrita."
-        ]
+        if iqr_format == "range":
+            riq_desc = "[Q1 - Q3]"
+        elif iqr_format == "width":
+            riq_desc = "(Q3 - Q1)"
+        else:
+            riq_desc = ""
+
+        if iqr_format in ("range", "width"):
+            notes = [
+                f"LOD: Límite de Detección analítico (≥ LOD); DE: Desviación Estándar; RIQ: Rango Intercuartílico {riq_desc}.",
+                "% > Límite: Porcentaje de la muestra que iguala o supera el valor de referencia en sangre (CDC/OMS/EPA). Entre paréntesis en negrita se indica el valor límite (µg/dL para Pb, µg/L para Hg y Cd).",
+                f"{med_col} y {mean_col}: Mediana acompañada del rango intercuartílico {riq_desc} y media aritmética con su desviación estándar (DE)."
+            ]
+        else:
+            notes = [
+                "LOD: Límite de Detección analítico (≥ LOD).",
+                "% > Límite: Porcentaje de la muestra que iguala o supera el valor de referencia en sangre (CDC/OMS/EPA). Entre paréntesis en negrita se indica el valor límite (µg/dL para Pb, µg/L para Hg y Cd).",
+                "Mediana y Media: Estimaciones descriptivas de tendencia central no paramétrica y paramétrica."
+            ]
 
         report = UnivariateTableReport(
             df=res_df,
