@@ -127,12 +127,14 @@ class BivariatePlots:
         return DEFAULT_PERMISSIBLE_LIMITS.get(col)
 
     def _resolve_column(self, col: str) -> str:
-        """Resuelve el nombre exacto de una columna en el DataFrame admitiendo alias comunes."""
-        if col in self.df.columns:
-            return col
-        clean_c = str(col).strip()
+        """Resuelve el nombre exacto de una columna en el DataFrame admitiendo alias comunes y formato enriquecido."""
+        clean_c = str(col).replace("**", "").replace("<strong>", "").replace("</strong>", "").strip()
         if clean_c in self.df.columns:
             return clean_c
+
+        clean_underscore = clean_c.replace(" ", "_")
+        if clean_underscore in self.df.columns:
+            return clean_underscore
 
         alias_map = {
             "plomo": "Plomo_ug_dL",
@@ -155,16 +157,17 @@ class BivariatePlots:
             "sector": "Sector",
             "institucion": "Institucion",
             "es_expuesto": "Es_Expuesto",
+            "es expuesto": "Es_Expuesto",
         }
-        lower_c = clean_c.lower()
+        lower_c = clean_underscore.lower()
         if lower_c in alias_map and alias_map[lower_c] in self.df.columns:
             return alias_map[lower_c]
 
         for c in self.df.columns:
-            if c.lower() == lower_c:
+            if c.lower() == lower_c or c.lower().replace("_", " ") == clean_c.lower():
                 return c
 
-        return col
+        return clean_underscore
 
     def _format_category_label(self, group_col: str, cat_val: Any, count: int) -> str:
         """Formatea el nombre de la categoría incluyendo el tamaño muestral (n=...)."""
@@ -249,14 +252,11 @@ class BivariatePlots:
         if sub_df.empty:
             raise ValueError(f"No hay observaciones válidas para las variables '{x_col}' y '{y_col}'.")
 
-        # Prueba estadística exacta
         stat_res = qualitative_association_test(sub_df["x"], sub_df["y"])
 
-        # Formatear etiquetas de categorías de X con n
         cats_x = sorted(sub_df["x"].unique(), key=lambda v: str(v))
         cats_y = sorted(sub_df["y"].unique(), key=lambda v: str(v))
 
-        # Tabla cruzada de recuentos y porcentajes
         ct_counts = pd.crosstab(sub_df["x"], sub_df["y"]).reindex(index=cats_x, columns=cats_y, fill_value=0)
         ct_pcts = pd.crosstab(sub_df["x"], sub_df["y"], normalize="index").reindex(index=cats_x, columns=cats_y, fill_value=0.0) * 100.0
 
@@ -290,7 +290,6 @@ class BivariatePlots:
                 alpha=0.85
             )
 
-            # Anotación sobre cada barra con % y n
             for bar, pct, cnt in zip(bars, pcts, cnts):
                 if pct > 0:
                     ax.text(
@@ -317,7 +316,6 @@ class BivariatePlots:
         legend_title = y_name_lbl.split("(")[0].strip() if "(" in y_name_lbl else y_name_lbl
         ax.legend(title=legend_title, frameon=True, framealpha=0.9, facecolor="#f8fafc", edgecolor="#cbd5e1", fontsize=9, title_fontsize=9.5, loc="upper right")
 
-        # Badge de contraste epidemiológico
         if show_stats:
             p_val = stat_res.get("fisher_p", np.nan)
             p_str = f"p = {p_val:.3f}" if (pd.notna(p_val) and p_val >= 0.001) else ("p < 0.001" if pd.notna(p_val) else "p = N/D")
@@ -419,7 +417,6 @@ class BivariatePlots:
         valid_df["_ci_high_plot"] = np.clip(valid_df["_ci_high"], 0.05, 50.0)
         valid_df["_or_plot"] = np.clip(valid_df["_or"], 0.05, 50.0)
 
-        # Ordenar por OR descendente
         valid_df = valid_df.sort_values(by="_or", ascending=False).head(top_n).iloc[::-1]
 
         fig, ax = plt.subplots(figsize=figsize)
@@ -539,7 +536,6 @@ class BivariatePlots:
         active_palette = palette or (["#0284c7", "#0f766e"] if len(cats) == 2 else self.palette)
 
         if is_param:
-            # Modo paramétrico: Boxplot mostrando la media con rombo (diamond) destacado
             sns.boxplot(
                 data=sub_df,
                 x=g_col,
@@ -559,7 +555,6 @@ class BivariatePlots:
                 showfliers=False
             )
         else:
-            # Modo no paramétrico: Énfasis en la mediana
             sns.boxplot(
                 data=sub_df,
                 x=g_col,
@@ -592,7 +587,6 @@ class BivariatePlots:
                 ax=ax
             )
 
-        # Límite permisible de referencia toxicológica
         limit_val = self._resolve_limit(q_col, permissible_limit)
         if show_limit and limit_val is not None:
             ax.axhline(
@@ -634,7 +628,6 @@ class BivariatePlots:
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-        # Bracket superior con estadísticas de contraste
         if show_stats and len(cats) >= 2:
             y_max_data = float(sub_df[q_col].max()) if len(sub_df) > 0 else 1.0
             y_min_data = float(sub_df[q_col].min()) if len(sub_df) > 0 else 0.0
@@ -967,6 +960,7 @@ class BivariatePlots:
     def coexposure_matrix(
         self,
         metals: Optional[Sequence[str]] = None,
+        variables: Optional[Sequence[str]] = None,
         method: str = "nonparametric",
         n_boot: int = 2000,
         cmap: str = "Blues",
@@ -975,22 +969,39 @@ class BivariatePlots:
     ) -> Tuple[plt.Figure, plt.Axes]:
         """
         Pilar 3: Matriz de Co-Exposición Inter-Metálica (Heatmap con intervalos Bootstrap y significancia).
-        Evalúa sincrónicamente Pb, Hg y Cd calculando correlaciones cruzadas no paramétricas o paramétricas.
+        Evalúa sincrónicamente Pb, Hg y Cd (o variables continuas especificadas) calculando
+        correlaciones cruzadas no paramétricas o paramétricas.
         """
         if isinstance(self, pd.DataFrame):
             return BivariatePlots(self).coexposure_matrix(
-                metals=metals, method=method, n_boot=n_boot, cmap=cmap,
+                metals=metals, variables=variables, method=method, n_boot=n_boot, cmap=cmap,
                 figsize=figsize, filepath=filepath
             )
 
-        target_metals = metals or DEFAULT_PRIMARY_METALS
-        valid_metals = [self._resolve_column(m) for m in target_metals if self._resolve_column(m) in self.df.columns]
+        target_cols = variables or metals or DEFAULT_PRIMARY_METALS
+        valid_cols = [self._resolve_column(m) for m in target_cols if self._resolve_column(m) in self.df.columns]
 
-        if len(valid_metals) < 2:
-            raise ValueError("Se requieren al menos 2 metales válidos presentes en el DataFrame para la matriz de co-exposición.")
+        if len(valid_cols) < 2:
+            cand_extra = ["Score_Riesgo", "Edad", "IMC", "Peso_kg", "Altura_cm"]
+            for c in cand_extra:
+                res_c = self._resolve_column(c)
+                if res_c in self.df.columns and res_c not in valid_cols:
+                    valid_cols.append(res_c)
+                if len(valid_cols) >= 3:
+                    break
 
-        sub_df = self.df[valid_metals].dropna()
-        k = len(valid_metals)
+        if len(valid_cols) < 2:
+            fig, ax = plt.subplots(figsize=figsize)
+            ax.text(
+                0.5, 0.5,
+                "Se requieren al menos 2 variables cuantitativas en el DataFrame\npara la matriz de co-exposición (ej. Hg, Pb, Cd).",
+                ha="center", va="center", fontsize=9.5, color="#64748b"
+            )
+            ax.axis("off")
+            return fig, ax
+
+        sub_df = self.df[valid_cols].apply(pd.to_numeric, errors="coerce").dropna()
+        k = len(valid_cols)
         corr_matrix = np.zeros((k, k))
         annot_matrix = np.empty((k, k), dtype=object)
 
@@ -1002,8 +1013,8 @@ class BivariatePlots:
                     corr_matrix[i, j] = 1.0
                     annot_matrix[i, j] = "1.00\n—"
                 else:
-                    col_i = valid_metals[i]
-                    col_j = valid_metals[j]
+                    col_i = valid_cols[i]
+                    col_j = valid_cols[j]
                     if is_param:
                         pr = pearson_correlation(sub_df[col_i], sub_df[col_j])
                         r_val = pr.get("r", 0.0)
@@ -1024,7 +1035,7 @@ class BivariatePlots:
                         annot_matrix[i, j] = f"{rho_val:+.2f}{stars}\n[{ci_l:+.2f}, {ci_h:+.2f}]"
 
         fig, ax = plt.subplots(figsize=figsize)
-        labels = [self.get_label(m) for m in valid_metals]
+        labels = [self.get_label(m) for m in valid_cols]
 
         mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
         sns.heatmap(
@@ -1244,7 +1255,6 @@ class BivariatePlots:
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-        # Prueba de Jonckheere-Terpstra de tendencia monótona
         if show_stats and len(ordered_levels) >= 2:
             y_max_data = float(sub_df[metal_resolved].max()) if len(sub_df) > 0 else 1.0
             y_min_data = float(sub_df[metal_resolved].min()) if len(sub_df) > 0 else 0.0
@@ -1353,7 +1363,6 @@ class BivariatePlots:
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
 
-        # Ocultar ejes vacíos sobrantes
         for j in range(n_plots, len(flat_axes)):
             flat_axes[j].set_visible(False)
 
@@ -1510,16 +1519,16 @@ class BivariatePlots:
                 return float(m.group(1)), float(m.group(2))
             return np.nan, np.nan
 
-        p_col = "p-valor (crudo)" if "p-valor (crudo)" in df_screen.columns else ("p_Raw" if "p_Raw" in df_screen.columns else "Valor p")
-        fdr_col = "FDR p-valor (BH)" if "FDR p-valor (BH)" in df_screen.columns else ("p (FDR)" if "p (FDR)" in df_screen.columns else "fdr_p")
-        eff_col = "Tamaño del Efecto [IC 95%]" if "Tamaño del Efecto [IC 95%]" in df_screen.columns else ("Tamaño del Efecto" if "Tamaño del Efecto" in df_screen.columns else "Efecto_Num")
-        var_col = "Predictor Candidato" if "Predictor Candidato" in df_screen.columns else ("Variable" if "Variable" in df_screen.columns else "Factor Exploratorio")
+        var_col = next((c for c in ["Variable Predictora", "Predictor Candidato", "Variable", "Factor Exploratorio", "Variable_Raw"] if c in df_screen.columns), df_screen.columns[0])
+        p_col = next((c for c in ["p (Crudo)", "p-valor (crudo)", "p_Raw", "Valor p", "p sin ajustar"] if c in df_screen.columns), None)
+        fdr_col = next((c for c in ["FDR p-valor (BH)", "p (FDR)", "fdr_p"] if c in df_screen.columns), None)
+        eff_col = next((c for c in ["Tamaño Efecto", "Tamaño del Efecto [IC 95%]", "Tamaño del Efecto", "Efecto_Num"] if c in df_screen.columns), None)
         collin_col = "Colinealidad (rho max)" if "Colinealidad (rho max)" in df_screen.columns else None
 
-        df_screen["_p_num"] = df_screen[p_col].apply(parse_p) if p_col in df_screen.columns else 1.0
-        df_screen["_fdr_num"] = df_screen[fdr_col].apply(parse_p) if fdr_col in df_screen.columns else 1.0
-        df_screen["_eff_num"] = df_screen[eff_col].apply(parse_eff) if eff_col in df_screen.columns else 0.0
-        ci_tuples = df_screen[eff_col].apply(parse_ci) if eff_col in df_screen.columns else [(np.nan, np.nan)] * len(df_screen)
+        df_screen["_p_num"] = df_screen[p_col].apply(parse_p) if p_col else 1.0
+        df_screen["_fdr_num"] = df_screen[fdr_col].apply(parse_p) if fdr_col else 1.0
+        df_screen["_eff_num"] = df_screen[eff_col].apply(parse_eff) if eff_col else 0.0
+        ci_tuples = df_screen[eff_col].apply(parse_ci) if eff_col else [(np.nan, np.nan)] * len(df_screen)
         df_screen["_ci_low"] = [t[0] for t in ci_tuples]
         df_screen["_ci_high"] = [t[1] for t in ci_tuples]
         df_screen["_log10_p"] = -np.log10(np.clip(df_screen["_p_num"], 1e-5, 1.0))
@@ -1677,22 +1686,25 @@ class BivariatePlots:
         if candidates is None:
             if screening_report is not None and hasattr(screening_report, "df"):
                 df_s = screening_report.df
-                var_col = "Predictor Candidato" if "Predictor Candidato" in df_s.columns else "Variable"
-                p_col = "p-valor (crudo)" if "p-valor (crudo)" in df_s.columns else "Valor p"
-                
-                def parse_p(v):
-                    try:
-                        return float(str(v).replace("<", "").strip())
-                    except Exception:
-                        return 1.0
-
-                candidates = df_s[df_s[p_col].apply(parse_p) < 0.20][var_col].head(8).tolist()
             else:
                 from heavystats.bivariate.tables import BivariateTables
                 bt = BivariateTables(self.df, labels_map=self.labels_map)
                 rep = bt.multivariate_screening(target=target, screening_p_threshold=0.20)
                 df_s = rep.df
-                candidates = df_s[df_s["p-valor (crudo)"].str.replace("<", "").astype(float) < 0.20]["Predictor Candidato"].head(8).tolist()
+
+            var_col = next((c for c in ["Variable Predictora", "Predictor Candidato", "Variable", "Factor Exploratorio"] if c in df_s.columns), df_s.columns[0])
+            p_col = next((c for c in ["p (Crudo)", "p-valor (crudo)", "p_Raw", "Valor p"] if c in df_s.columns), None)
+
+            def parse_p(v):
+                try:
+                    return float(str(v).replace("<strong>", "").replace("</strong>", "").replace("*", "").replace("<", "").strip())
+                except Exception:
+                    return 1.0
+
+            if p_col:
+                candidates = df_s[df_s[p_col].apply(parse_p) < 0.20][var_col].head(8).tolist()
+            else:
+                candidates = df_s[var_col].head(8).tolist()
 
         valid_cands = [self._resolve_column(c) for c in candidates if self._resolve_column(c) in self.df.columns]
         if len(valid_cands) < 2:
