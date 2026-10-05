@@ -79,7 +79,6 @@ DEFAULT_LABELS_MAP: Dict[str, str] = {
     "Exposicion_Industrias_fabrica_metales": "Fábrica de Metales",
     "Exposicion_Industrias_fabrica_productos_quimicos": "Fábrica de Productos Químicos",
     "Exposicion_Lugares": "Exposición a Lugares",
-    "Exposicion_Lugares_canale": "Canales",
     "Exposicion_Lugares_canales": "Canales",
     "Exposicion_Lugares_estacion_gasolina": "Estación de Gasolina",
     "Exposicion_Lugares_llenadora_gas_natural": "Llenadora de Gas Natural",

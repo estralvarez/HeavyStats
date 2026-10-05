@@ -1,6 +1,6 @@
 """
-Módulo de Análisis Bivariante de HeavyStats (`heavystats.bivariate`).
-Implementa el protocolo de análisis estadístico bivariante bioestadístico y toxicológico.
+Módulo de Visualización Bivariante de HeavyStats (`heavystats.bivariate`).
+Implementa el motor gráfico editorial y los contrastes estadísticos bivariantes.
 """
 
 from heavystats.bivariate.tests import (
@@ -14,25 +14,17 @@ from heavystats.bivariate.tests import (
     pearson_correlation,
     kendall_correlation,
     spearman_matrix,
-    fisher_chi2_test,
-    qualitative_association_test,
     adjust_pvalues,
     hodges_lehmann_2sample,
     bootstrap_ci_diff_medians,
-    rank_bivariate_associations,
-    collinearity_matrix,
-)
-from heavystats.bivariate.tables import (
-    BivariateTables,
-    BivariateTableReport,
-    qualitative_association,
-    qualitative_summary,
-    compare_groups,
-    correlation_analysis,
-    multivariate_screening,
 )
 from heavystats.bivariate.plots import (
     BivariatePlots,
+    compare_groups_plot,
+    correlation_analysis_plot,
+    coexposure_matrix_plot,
+    diet_radar_plot,
+    diet_boxplots_plot,
 )
 from heavystats.bivariate.constants import (
     DEFAULT_PRIMARY_METALS,
@@ -49,14 +41,12 @@ from heavystats.bivariate.constants import (
 )
 
 __all__ = [
-    "BivariateTables",
-    "BivariateTableReport",
     "BivariatePlots",
-    "qualitative_association",
-    "qualitative_summary",
-    "compare_groups",
-    "correlation_analysis",
-    "multivariate_screening",
+    "compare_groups_plot",
+    "correlation_analysis_plot",
+    "coexposure_matrix_plot",
+    "diet_radar_plot",
+    "diet_boxplots_plot",
 
     "mann_whitney_test",
     "independent_t_test",
@@ -68,13 +58,9 @@ __all__ = [
     "pearson_correlation",
     "kendall_correlation",
     "spearman_matrix",
-    "fisher_chi2_test",
-    "qualitative_association_test",
     "adjust_pvalues",
     "hodges_lehmann_2sample",
     "bootstrap_ci_diff_medians",
-    "rank_bivariate_associations",
-    "collinearity_matrix",
     "DEFAULT_PRIMARY_METALS",
     "DEFAULT_METAL_LIMITS",
     "DEFAULT_METAL_LODS",

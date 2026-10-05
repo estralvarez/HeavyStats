@@ -452,7 +452,10 @@ def _clean_choice_suffix(col: str, choice: str) -> str:
         if not filtered_words:
             filtered_words = choice_words
             
-    return "_".join(filtered_words)
+    res = "_".join(filtered_words)
+    if res in ("canale", "canal"):
+        return "canales"
+    return res
 
 
 def desaggregate_multiple_responses(
@@ -465,14 +468,21 @@ def desaggregate_multiple_responses(
     if columns is None:
         columns = ["Salud_Transporte", "Salud_Agua", "Exposicion_Talleres", "Exposicion_Lugares", "Exposicion_Industrias", "Salud_Suplementos"]
     df_clean = df.copy()
+
+    def _normalize_choice(c_raw: str) -> str:
+        c_str = c_raw.strip()
+        if c_str.lower() in ("canale", "canal"):
+            return "Canales"
+        return c_str
+
     for col in columns:
         if col not in df_clean.columns:
             continue
             
-        # Obtener todas las opciones únicas
+        # Obtener todas las opciones únicas normalizadas
         all_choices = set()
         for val in df_clean[col].dropna():
-            choices = [c.strip() for c in str(val).split(separator) if c.strip()]
+            choices = [_normalize_choice(c) for c in str(val).split(separator) if c.strip()]
             all_choices.update(choices)
             
         # Filtrar opciones negativas típicas
@@ -488,10 +498,23 @@ def desaggregate_multiple_responses(
             suffix = _clean_choice_suffix(col, choice)
             new_col_name = f"{col}_{suffix}"
             df_clean[new_col_name] = df_clean[col].apply(
-                lambda val: 1 if pd.notna(val) and choice in [c.strip() for c in str(val).split(separator)]
+                lambda val: 1 if pd.notna(val) and choice in [_normalize_choice(c) for c in str(val).split(separator) if c.strip()]
                 else (np.nan if pd.isna(val) else 0)
             )
             df_clean[new_col_name] = df_clean[new_col_name].astype("Int64")
+
+    # Consolidar de forma definitiva Exposicion_Lugares_canale en Exposicion_Lugares_canales
+    if "Exposicion_Lugares_canale" in df_clean.columns:
+        if "Exposicion_Lugares_canales" in df_clean.columns:
+            df_clean["Exposicion_Lugares_canales"] = (
+                df_clean[["Exposicion_Lugares_canales", "Exposicion_Lugares_canale"]]
+                .fillna(0)
+                .max(axis=1)
+                .astype("Int64")
+            )
+            df_clean = df_clean.drop(columns=["Exposicion_Lugares_canale"])
+        else:
+            df_clean = df_clean.rename(columns={"Exposicion_Lugares_canale": "Exposicion_Lugares_canales"})
             
     return df_clean
 
@@ -540,6 +563,19 @@ def create_composite_indicators(df: pd.DataFrame) -> pd.DataFrame:
     y calcula el Índice de Masa Corporal (IMC) si no está presente.
     """
     df_clean = df.copy()
+
+    # 0. Consolidación de Exposicion_Lugares_canale en Exposicion_Lugares_canales
+    if "Exposicion_Lugares_canale" in df_clean.columns:
+        if "Exposicion_Lugares_canales" in df_clean.columns:
+            df_clean["Exposicion_Lugares_canales"] = (
+                df_clean[["Exposicion_Lugares_canales", "Exposicion_Lugares_canale"]]
+                .fillna(0)
+                .max(axis=1)
+                .astype("Int64")
+            )
+            df_clean = df_clean.drop(columns=["Exposicion_Lugares_canale"])
+        else:
+            df_clean = df_clean.rename(columns={"Exposicion_Lugares_canale": "Exposicion_Lugares_canales"})
 
     # 1. Cualquier Taller
     taller_cols = [c for c in df_clean.columns if c.startswith("Exposicion_Talleres_")]

@@ -1,4 +1,4 @@
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 
 from heavystats.validation import ValidationReport, validate_data
 from heavystats.comparation import (
@@ -32,8 +32,6 @@ from heavystats.univariate import (
     get_label,
 )
 from heavystats.bivariate import (
-    BivariateTables,
-    BivariateTableReport,
     BivariatePlots,
     mann_whitney_test,
     independent_t_test,
@@ -45,13 +43,9 @@ from heavystats.bivariate import (
     pearson_correlation,
     kendall_correlation,
     spearman_matrix,
-    fisher_chi2_test,
-    qualitative_association_test,
     adjust_pvalues,
     hodges_lehmann_2sample,
     bootstrap_ci_diff_medians,
-    rank_bivariate_associations,
-    collinearity_matrix,
     DEFAULT_METAL_LIMITS,
     DEFAULT_METAL_LODS,
     DEFAULT_METAL_CUTOFFS,
@@ -82,8 +76,6 @@ __all__ = [
     "UnivariateTables",
     "UnivariatePlots",
     "desglosar_multirrespuesta",
-    "BivariateTables",
-    "BivariateTableReport",
     "BivariatePlots",
     "mann_whitney_test",
     "independent_t_test",
@@ -95,13 +87,9 @@ __all__ = [
     "pearson_correlation",
     "kendall_correlation",
     "spearman_matrix",
-    "fisher_chi2_test",
-    "qualitative_association_test",
     "adjust_pvalues",
     "hodges_lehmann_2sample",
     "bootstrap_ci_diff_medians",
-    "rank_bivariate_associations",
-    "collinearity_matrix",
     "DEFAULT_LABELS_MAP",
     "DEFAULT_CUSTOM_PARAMS",
     "DEFAULT_PERMISSIBLE_LIMITS",

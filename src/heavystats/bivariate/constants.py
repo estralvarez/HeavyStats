@@ -100,7 +100,6 @@ DEFAULT_BIVARIATE_GROUPS: Dict[str, List[str]] = {
         "Exposicion_Talleres_mecanico",
         "Exposicion_Industrias_fabrica_metales",
         "Exposicion_Industrias_fabrica_productos_quimicos",
-        "Exposicion_Lugares_canale",
         "Exposicion_Lugares_canales",
         "Exposicion_Lugares_estacion_gasolina",
         "Exposicion_Lugares_llenadora_gas_natural",

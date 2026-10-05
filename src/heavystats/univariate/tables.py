@@ -12,6 +12,7 @@ from heavystats.univariate.constants import (
     DEFAULT_PERMISSIBLE_LIMITS,
     get_label,
 )
+from heavystats.univariate.plots.categorico import DEFAULT_DIETARY_MAP
 from heavystats.html_utils import render_html_table, BaseReport
 
 
@@ -300,11 +301,30 @@ class UnivariateTables:
         if ungrouped_cols:
             grouped_cols["Otras Variables"] = ungrouped_cols
 
-        def format_val_str(val: Any) -> str:
+        def format_val_str(val: Any, col_name: str = "") -> str:
+            if pd.isna(val):
+                return "N/D"
             val_str = str(val).strip()
-            if val_str.lower() in ("si", "sí", "yes", "true", "1", "1.0"):
+            if not val_str:
+                return val_str
+            # Si es variable dietaria codificada numéricamente (0..4)
+            if col_name.startswith("Alim_"):
+                try:
+                    f_val = float(val_str)
+                    if f_val.is_integer() and int(f_val) in DEFAULT_DIETARY_MAP:
+                        return DEFAULT_DIETARY_MAP[int(f_val)]
+                except (ValueError, TypeError):
+                    pass
+            # Si representa un número decimal entero (ej. "2.0", "3.0")
+            try:
+                f_val = float(val_str)
+                if f_val.is_integer():
+                    return str(int(f_val))
+            except (ValueError, TypeError):
+                pass
+            if val_str.lower() in ("si", "sí", "yes"):
                 return "Sí"
-            if val_str.lower() in ("no", "false", "0", "0.0"):
+            if val_str.lower() in ("no", "false"):
                 return "No"
             return val_str[0].upper() + val_str[1:] if len(val_str) > 0 else val_str
 
@@ -373,7 +393,7 @@ class UnivariateTables:
                     first = True
                     for cat in categories:
                         row_var_label = f"**{var_label}**" if first else ""
-                        cat_label = format_val_str(cat)
+                        cat_label = format_val_str(cat, col_name=col)
 
                         count_n = val_counts_n.get(cat, 0)
                         count_N = val_counts_N.get(cat, 0)

@@ -4,6 +4,7 @@ import heavystats as hs
 from heavystats.bivariate import (
     adjust_pvalues,
     mann_whitney_test,
+    kruskal_wallis_test,
     spearman_matrix,
     spearman_correlation,
 )
@@ -39,140 +40,246 @@ def test_bivariate_spearman_matrix():
         assert isinstance(df_mat, pd.DataFrame)
 
 
-def test_qualitative_association_and_summary():
-    df = pd.DataFrame({
-        "Consumo_Pescado": ["Alto", "Alto", "Bajo", "Bajo", "Alto", "Bajo", "Alto", "Bajo", "Alto", "Alto"],
-        "Amalgama": ["Si", "No", "Si", "No", "No", "Si", "Si", "No", "Si", "No"],
-        "Hg_Alto": ["Si", "Si", "No", "No", "Si", "No", "Si", "No", "No", "Si"]
-    })
-    
-    # Test single 2x2 test
-    res = hs.bivariate.qualitative_association_test(df["Consumo_Pescado"], df["Hg_Alto"])
-    assert "p_val_fisher" in res
-    assert "odds_ratio" in res
-    assert "relative_risk" in res
-    assert "cramer_v" in res
+def test_bivariate_plots_three_pillars():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
 
-    # Test BivariateTables.qualitative_association
-    assoc_rep = hs.bivariate.BivariateTables.qualitative_association(df, "Consumo_Pescado", "Hg_Alto")
-    assert assoc_rep is not None
-    assert isinstance(assoc_rep.to_dataframe(), pd.DataFrame)
-
-    # Test BivariateTables.qualitative_summary
-    screen_rep = hs.bivariate.BivariateTables.qualitative_summary(
-        df,
-        target_col="Hg_Alto",
-        feature_cols=["Consumo_Pescado", "Amalgama"],
-        target_positive="Si"
-    )
-    assert screen_rep is not None
-    df_screen = screen_rep.to_dataframe()
-    assert len(df_screen) == 2
-    assert "Odds Ratio [IC 95%]" in df_screen.columns or "Fisher (p)" in df_screen.columns
-
-
-def test_compare_groups_parametric_and_nonparametric():
     np.random.seed(42)
+    n = 20
     df = pd.DataFrame({
         "Grupo2": ["Control"] * 10 + ["Expuesto"] * 10,
         "Grupo3": ["Bajo"] * 7 + ["Medio"] * 7 + ["Alto"] * 6,
-        "Mercurio": np.concatenate([np.random.normal(2.0, 0.5, 10), np.random.normal(5.5, 1.2, 10)]),
-        "Plomo": np.random.normal(10.0, 2.0, 20)
+        "Consumo_Pescado": ["Alto", "Alto", "Bajo", "Bajo", "Alto", "Bajo", "Alto", "Bajo", "Alto", "Alto"] * 2,
+        "Amalgama": ["Si", "No", "Si", "No", "No", "Si", "Si", "No", "Si", "No"] * 2,
+        "Hg_Alto": ["Si", "Si", "No", "No", "Si", "No", "Si", "No", "No", "Si"] * 2,
+        "Edad": np.random.uniform(20, 60, n),
+        "Pescado_Frec": np.random.uniform(0, 10, n),
+        "Mercurio": np.concatenate([np.random.normal(2.0, 0.4, 10), np.random.normal(5.8, 1.1, 10)]),
+        "Plomo": np.random.normal(8.0, 1.5, n),
+        "Score_Riesgo": np.random.uniform(1, 9, n),
     })
 
-    # Test 2 groups - Non-parametric
-    rep_np2 = hs.bivariate.BivariateTables.compare_groups(
-        df, group_col="Grupo2", continuous_cols=["Mercurio", "Plomo"], method="nonparametric"
+    bp = hs.bivariate.BivariatePlots(df)
+
+    # PILAR 1: Cuantitativa vs Cualitativa (Dual: No Paramétrico y Paramétrico)
+    fig1_np, ax1_np = bp.compare_groups(quantitative="Mercurio", group="Grupo2", method="nonparametric")
+    assert fig1_np is not None
+    plt.close(fig1_np)
+
+    fig1_p, ax1_p = bp.compare_groups(quantitative="Mercurio", group="Grupo2", method="parametric")
+    assert fig1_p is not None
+    plt.close(fig1_p)
+
+    fig1_k, ax1_k = bp.compare_groups(quantitative="Mercurio", group="Grupo3", method="nonparametric")
+    assert fig1_k is not None
+    plt.close(fig1_k)
+
+    # Compatibilidad Pilar 1
+    fig1_leg, ax1_leg = bp.metal_by_group(group_col="Grupo2", metal="Mercurio")
+    assert fig1_leg is not None
+    plt.close(fig1_leg)
+
+    # PILAR 2: Cuantitativa vs Cuantitativa (Dual: Spearman/Bootstrap y Pearson/OLS)
+    fig2_np, ax2_np = bp.correlation_analysis(x="Edad", y="Mercurio", method="nonparametric")
+    assert fig2_np is not None
+    plt.close(fig2_np)
+
+    fig2_p, ax2_p = bp.correlation_analysis(x="Edad", y="Mercurio", method="parametric")
+    assert fig2_p is not None
+    plt.close(fig2_p)
+
+    fig2_mat, ax2_mat = bp.coexposure_matrix(variables=["Mercurio", "Plomo", "Edad"], kind="heatmap")
+    assert fig2_mat is not None
+    plt.close(fig2_mat)
+
+    fig2_scat_mat, axes2_scat_mat = bp.coexposure_matrix(variables=["Mercurio", "Plomo", "Edad"], kind="scatter")
+    assert fig2_scat_mat is not None
+    plt.close(fig2_scat_mat)
+
+    fig2_ord, ax2_ord = bp.ordinal_trend_plot(ordinal_col="Grupo3", metal="Mercurio")
+    assert fig2_ord is not None
+    plt.close(fig2_ord)
+
+    # Compatibilidad Pilar 2
+    fig2_scat, ax2_scat = bp.scatter_continuous(continuous_col="Edad", metal="Mercurio")
+    assert fig2_scat is not None
+    plt.close(fig2_scat)
+
+    # Funciones de conveniencia a nivel de paquete
+    fig_f1, _ = hs.bivariate.compare_groups_plot(df, quantitative="Mercurio", group="Grupo2")
+    assert fig_f1 is not None
+    plt.close(fig_f1)
+
+    fig_f2, _ = hs.bivariate.correlation_analysis_plot(df, x="Edad", y="Mercurio")
+    assert fig_f2 is not None
+    plt.close(fig_f2)
+
+    fig_f3, _ = hs.bivariate.coexposure_matrix_plot(df, variables=["Mercurio", "Plomo"])
+    assert fig_f3 is not None
+    plt.close(fig_f3)
+
+    plt.close("all")
+
+
+def test_bivariate_grouping_dummies_and_multiple():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    df_test = pd.DataFrame({
+        "Sexo": ["F", "F", "F", "M", "M", "M"],
+        "Sector": ["Norte", "Norte", "Sur", "Sur", "Sur", "Norte"],
+        "Exposicion_Lugares_canale": [1, 0, 0, 0, 0, 0],
+        "Exposicion_Lugares_canales": [0, 1, 0, 0, 0, 0],
+        "Exposicion_Lugares_rios": [0, 1, 1, 0, 1, 0],
+        "Exposicion_Talleres_mecanico": [1, 1, 0, 0, 1, 0],
+        "Exposicion_Industrias_fabrica_metales": [0, 0, 1, 1, 0, 0],
+        "Plomo_ug_dL": [2.5, 3.2, 4.1, 1.8, 5.0, 2.9],
+    })
+
+    bp = hs.bivariate.BivariatePlots(df_test)
+
+    # 1. Verificar consolidación de Exposicion_Lugares_canale
+    assert "Exposicion_Lugares_canale" not in bp.df.columns
+    assert "Exposicion_Lugares_canales" in bp.df.columns
+    assert bp.df["Exposicion_Lugares_canales"].sum() == 2
+
+    # 2. plot_categorical con lista de dummies (incluyendo canale como alias)
+    fig_d, ax_d = bp.plot_categorical(
+        metal="Plomo_ug_dL",
+        group_col=["Exposicion_Lugares_canales", "Exposicion_Lugares_rios", "Exposicion_Lugares_canale"]
     )
-    assert rep_np2 is not None
-    df_np2 = rep_np2.to_dataframe()
-    assert len(df_np2) == 2
-    assert "Estadístico" in df_np2.columns or "p-valor" in df_np2.columns
+    assert fig_d is not None
+    xticks_d = [t.get_text() for t in ax_d.get_xticklabels()]
+    assert any("Canales" in t for t in xticks_d)
+    assert any("Ríos" in t or "Rios" in t for t in xticks_d)
+    plt.close(fig_d)
 
-    # Test 2 groups - Parametric
-    rep_p2 = hs.bivariate.BivariateTables.compare_groups(
-        df, group_col="Grupo2", continuous_cols=["Mercurio"], method="parametric"
-    )
-    assert rep_p2 is not None
-    df_p2 = rep_p2.to_dataframe()
-    assert len(df_p2) == 2
-    assert "t de Welch" in df_p2.columns or "Valor p" in df_p2.columns
+    # 3. plot_categorical con dimensión por nombre
+    fig_lug, ax_lug = bp.plot_categorical(metal="Plomo_ug_dL", group_col="lugares")
+    assert fig_lug is not None
+    plt.close(fig_lug)
 
+    fig_all, ax_all = bp.plot_categorical(metal="Plomo_ug_dL", group_col="all_dummies")
+    assert fig_all is not None
+    plt.close(fig_all)
 
-    # Test >2 groups - Non-parametric (Kruskal-Wallis)
-    rep_np3 = hs.bivariate.BivariateTables.compare_groups(
-        df, group_col="Grupo3", continuous_cols=["Mercurio"], method="nonparametric"
-    )
-    assert rep_np3 is not None
-    df_np3 = rep_np3.to_dataframe()
-    assert "Kruskal-Wallis H" in df_np3.columns
+    # 4. plot_categorical con interacción de columnas categóricas
+    fig_inter, ax_inter = bp.plot_categorical(metal="Plomo_ug_dL", group_col=["Sector", "Sexo"])
+    assert fig_inter is not None
+    plt.close(fig_inter)
 
-    # Test >2 groups - Parametric (ANOVA)
-    rep_p3 = hs.bivariate.BivariateTables.compare_groups(
-        df, group_col="Grupo3", continuous_cols=["Mercurio"], method="parametric"
-    )
-    assert rep_p3 is not None
-    df_p3 = rep_p3.to_dataframe()
-    assert "ANOVA F" in df_p3.columns
+    # 5. Método explícito plot_dummies
+    fig_dum, ax_dum = bp.plot_dummies(metal="Plomo_ug_dL", dimension="talleres")
+    assert fig_dum is not None
+    plt.close(fig_dum)
+
+    plt.close("all")
 
 
+def test_plot_diet_radar():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
 
-def test_correlation_analysis_parametric_and_nonparametric():
-    np.random.seed(42)
-    x = np.linspace(1, 20, 20)
-    y = 2.5 * x + np.random.normal(0, 2, 20)
-    z = np.random.normal(0, 1, 20)
-    df = pd.DataFrame({"X": x, "Y": y, "Z": z})
-
-    # Non-parametric (Spearman & Kendall)
-    rep_np = hs.bivariate.BivariateTables.correlation_analysis(
-        df, target_col="Y", continuous_cols=["X", "Z"], method="nonparametric"
-    )
-    assert rep_np is not None
-    df_np = rep_np.to_dataframe()
-    assert len(df_np) == 2
-    assert "Spearman" in df_np.iloc[0]["Metodo"]
-
-    # Parametric (Pearson & Linear Regression)
-    rep_p = hs.bivariate.BivariateTables.correlation_analysis(
-        df, target_col="Y", continuous_cols=["X", "Z"], method="parametric"
-    )
-    assert rep_p is not None
-    df_p = rep_p.to_dataframe()
-    assert len(df_p) == 2
-    assert "Pearson" in df_p.iloc[0]["Metodo"]
-    assert "Pendiente (Beta)" in df_p.columns
-
-
-def test_multivariate_screening_battery():
     np.random.seed(42)
     n = 20
-    grupo = ["A"] * 10 + ["B"] * 10
-    habito = ["Si"] * 12 + ["No"] * 8
-    edad = np.random.uniform(20, 60, n)
-    pescado = np.random.uniform(0, 10, n)
-    hg = 0.5 * pescado + np.random.normal(2, 0.5, n)
-
-    df = pd.DataFrame({
-        "Grupo": grupo,
-        "Habito": habito,
-        "Edad": edad,
-        "Pescado": pescado,
-        "Mercurio": hg
+    df_radar = pd.DataFrame({
+        "Plomo_ug_dL": np.random.uniform(1.0, 5.0, n),
+        "Alim_Cereales": np.random.randint(0, 5, n),
+        "Alim_Leguminosas": np.random.randint(0, 5, n),
+        "Alim_Carnes": np.random.randint(0, 5, n),
+        "Alim_Pescados": np.random.randint(0, 5, n),
+        "Alim_Frutas": np.random.randint(0, 5, n),
     })
 
-    screening_rep = hs.bivariate.BivariateTables.multivariate_screening(
-        df,
-        target_col="Mercurio",
-        candidate_features=["Grupo", "Habito", "Edad", "Pescado"],
-        method="nonparametric",
-        fdr_alpha=0.10
-    )
-    assert screening_rep is not None
-    df_screen = screening_rep.to_dataframe()
-    assert len(df_screen) == 4
-    assert "FDR p-valor (BH)" in df_screen.columns
-    assert "Prioridad Multivariable" in df_screen.columns
-    assert "Rank" in df_screen.columns
-    assert "Colinealidad (rho max)" in df_screen.columns
+    bp = hs.bivariate.BivariatePlots(df_radar)
+
+    # 1. Estratificación por mediana
+    fig_med, ax_med = bp.plot_diet_radar(metal="Plomo_ug_dL", stratify_by="median")
+    assert fig_med is not None
+    assert ax_med is not None
+    thetaticks = [t.get_text() for t in ax_med.get_xticklabels()]
+    assert "Cereales" in thetaticks
+    assert "Pescados" in thetaticks
+    plt.close(fig_med)
+
+    # 2. Estratificación por terciles
+    fig_terc, ax_terc = bp.plot_diet_radar(metal="Plomo_ug_dL", stratify_by="terciles")
+    assert fig_terc is not None
+    plt.close(fig_terc)
+
+    # 3. Paneles divididos contiguos (split_panels=True)
+    fig_split, axes_split = bp.plot_diet_radar(metal="Plomo_ug_dL", stratify_by="median", split_panels=True)
+    assert fig_split is not None
+    assert len(axes_split) == 2
+    plt.close(fig_split)
+
+    # 4. Función de conveniencia diet_radar_plot
+    fig_conv, ax_conv = hs.bivariate.diet_radar_plot(df_radar, metal="Plomo_ug_dL", split_panels=True)
+    assert fig_conv is not None
+    assert len(ax_conv) == 2
+    plt.close(fig_conv)
+
+    # 4. Comprobación de error si no existen columnas Alim_
+    df_no_alim = pd.DataFrame({"Plomo_ug_dL": [1.0, 2.0], "Otro": [1, 2]})
+    bp_no_alim = hs.bivariate.BivariatePlots(df_no_alim)
+    try:
+        bp_no_alim.plot_diet_radar(metal="Plomo_ug_dL")
+        assert False, "Debería haber levantado ValueError"
+    except ValueError:
+        pass
+
+    plt.close("all")
+
+
+def test_plot_diet_boxplots():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    np.random.seed(42)
+    n = 30
+    df_box = pd.DataFrame({
+        "Plomo_ug_dL": np.random.uniform(1.0, 5.0, n),
+        "Alim_Cereales": np.random.randint(0, 5, n),
+        "Alim_Leguminosas": np.random.randint(0, 5, n),
+        "Alim_Carnes": np.random.randint(0, 5, n),
+        "Alim_Pescados": np.random.randint(0, 5, n),
+    })
+
+    bp = hs.bivariate.BivariatePlots(df_box)
+
+    # 1. Modo grid
+    fig_grid, axes_grid = bp.plot_diet_boxplots(metal="Plomo_ug_dL", layout="grid", ncols=2)
+    assert fig_grid is not None
+    assert axes_grid.size == 4
+    plt.close(fig_grid)
+
+    # 2. Modo consolidated
+    fig_cons, ax_cons = bp.plot_diet_boxplots(metal="Plomo_ug_dL", layout="consolidated")
+    assert fig_cons is not None
+    assert ax_cons is not None
+    plt.close(fig_cons)
+
+    # 3. Función de conveniencia diet_boxplots_plot
+    fig_conv, axes_conv = hs.bivariate.diet_boxplots_plot(df_box, metal="Plomo_ug_dL", layout="grid", ncols=2)
+    assert fig_conv is not None
+    assert axes_conv.size == 4
+    plt.close(fig_conv)
+
+    # 4. Error si no hay columnas de dieta
+    df_no_alim = pd.DataFrame({"Plomo_ug_dL": [1.0, 2.0], "Otro": [1, 2]})
+    bp_no = hs.bivariate.BivariatePlots(df_no_alim)
+    try:
+        bp_no.plot_diet_boxplots(metal="Plomo_ug_dL")
+        assert False, "Debería haber levantado ValueError"
+    except ValueError:
+        pass
+
+    plt.close("all")
+
+
+
 

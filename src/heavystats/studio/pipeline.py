@@ -97,12 +97,7 @@ def ejecutar_pipeline(cfg, progress_callback=None, force=False):
     nb_u2 = generar_cuaderno_univariante_graficos(cfg)
     cuadernos_generados.append(nb_u2)
 
-    # 7. Bivariante tablas
-    notificar(f"Construyendo bivariante/01_analisis_estadistico.ipynb ({cfg['nombre']})...")
-    nb_b1 = generar_cuaderno_bivariante_tablas(cfg)
-    cuadernos_generados.append(nb_b1)
-
-    # 8. Bivariante gráficos
+    # 7. Bivariante gráficos
     notificar("Construyendo bivariante/02_graficos_bivariantes.ipynb (asociaciones)...")
     nb_b2 = generar_cuaderno_bivariante_graficos(cfg)
     cuadernos_generados.append(nb_b2)
