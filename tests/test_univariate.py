@@ -223,7 +223,41 @@ def test_base_plots_canvas_engine_without_data():
     # 2. Crear mosaico con mosaic()
     fig_m, axd = base.mosaic([["p1", "p2"]], figsize=(8, 3))
     assert "p1" in axd and "p2" in axd
-
     base.close_all()
+
+
+def test_plot_distribucion_percentile_mask():
+    """Verifica la máscara de percentiles (<=P25, >P25 y <P75, >=P75) en plot_distribucion y obtener_mascara_percentiles."""
+    df = hs.load_data()
+    df_hg = hs.select_metal(df, concentration_col="hg")
+    uplots = hs.UnivariatePlots(df=df_hg)
+
+    # 1. Test visual pipeline con percentile_mask=True
+    figs = uplots.plot_distribucion(
+        columns=["Mercurio_ug_L"],
+        percentile_mask=True,
+        kde=False,
+        overlay_points=True
+    )
+    assert len(figs) == 1
+    ax_box, ax_hist = figs[0].axes[0], figs[0].axes[1]
+    # Verificar que existen las líneas divisorias en ax_hist
+    assert len(ax_hist.lines) >= 2
+
+    # 2. Test del método estadístico obtener_mascara_percentiles
+    res = uplots.obtener_mascara_percentiles("Mercurio_ug_L")
+    assert "p_low" in res
+    assert "p_high" in res
+    assert res["n_total"] == 20
+    assert res["estratos"]["<=P25"]["n"] == 5
+    assert res["estratos"]["<=P25"]["pct"] == 25.0
+    assert res["estratos"][">P25 y <P75"]["n"] == 10
+    assert res["estratos"][">P25 y <P75"]["pct"] == 50.0
+    assert res["estratos"][">=P75"]["n"] == 5
+    assert res["estratos"][">=P75"]["pct"] == 25.0
+    assert len(res["resumen"]) == 3
+
+    hs.UnivariatePlots.close_all()
+
 
 

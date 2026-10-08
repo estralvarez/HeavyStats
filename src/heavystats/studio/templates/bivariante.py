@@ -38,12 +38,23 @@ Motor gráfico editorial a 300 DPI estructurado según los principios del análi
    - Contrastes no paramétricos (Mann–Whitney $U$, Kruskal–Wallis $H$, diferencias de medianas $\\Delta\\text{{Med}}$ y tamaños de efecto $r_{{rb}}$ / $\\epsilon^2$).
    - Contrastes paramétricos (prueba $t$ de Welch, ANOVA unidireccional, diferencia de medias y Hedges' $g$ / $\\eta^2$).
    - Anotación directa en corchetes (*brackets*), tamaños muestrales ($n=\\dots$) en ejes y estilización de publicaciones científicas.
-   - Gradientes ordinales dietarios (prueba de Jonckheere–Terpstra), mosaicos de consumo y perfiles polares (radar / spider charts).
-2. **Variable Cuantitativa vs. Variable Cuantitativa**:
+2. **Hábitos Dietarios y Validación del Algoritmo de Riesgo**:
+   - Gradientes ordinales dosis–respuesta (prueba de Jonckheere–Terpstra o Pearson).
+   - Mosaicos facetados dietarios en cuadrícula (`layout="grid"`), perfiles polares (radar / spider charts) y regresión del score de riesgo.
+3. **Variable Cuantitativa vs. Variable Cuantitativa**:
    - Dispersión continua, correlación de Spearman $\\rho_s$ con intervalos de confianza al 95% calculados por **Bootstrap (2,000 réplicas)**, Kendall $\\tau_b$ y regresión lineal OLS / Pearson $r$ ($R^2$).
    - Matrices de co-exposición bivariante: Heatmap triangular inferior estilizado y matriz de dispersión compacta con distribuciones KDE univariantes.
-3. **Mosaico Bivariante Integrado y Funciones a Nivel de Módulo**:
-   - Cuadrícula multipanel consolidada (`plot_grid`) y funciones funcionales de acceso directo (`compare_groups_plot`, `correlation_analysis_plot`, `diet_radar_plot`, etc.)."""
+4. **Mosaico Bivariante Integrado y Funciones a Nivel de Módulo**:
+   - Cuadrícula multipanel consolidada (`plot_grid`) y funciones de acceso directo funcional (`compare_groups_plot`, etc.).
+5. **Análisis de Similitud Dietaria y Contrastes de Subcohorte de Alta Carga Corporal**:
+   - Ranking de correlación / distancia frente a la concentración plasmática (`similarity_ranking_plot`).
+   - Contraste modal vs resto de la muestra (`subcohort_contrast_plot`) con opciones paramétricas y no paramétricas.
+   - Tamizaje sistemático automatizado de contrastes significativos (`scan_subcohort_contrasts`).
+   - Consenso de factores comunes de riesgo (`shared_factors_plot`) y mosaico editorial de subcohorte (`subcohort_mosaic_plot`).
+6. **Radiografía Epidemiológica de la Encuesta y Matriz de Síntesis Normalizada**:
+   - Mapas de calor temáticos por bloque con columnas normalizadas $[0.0 - 1.0]$ (`survey_block_heatmap`).
+   - Suite completa automatizada de los 7 bloques temáticos a 300 DPI (`plot_survey_radiography`).
+   - Matriz de síntesis ejecutiva de exposición multidominio clasificada por carga biológica (`plot_survey_synthesis`)."""
         },
         {
             "tipo": "markdown",
@@ -73,6 +84,14 @@ from heavystats.bivariate import (
     coexposure_matrix_plot,
     diet_radar_plot,
     diet_boxplots_plot,
+    similarity_ranking_plot,
+    subcohort_contrast_plot,
+    shared_factors_plot,
+    subcohort_mosaic_plot,
+    survey_block_heatmap_plot,
+    survey_radiography_plot,
+    survey_synthesis_plot,
+    scan_subcohort_contrasts,
 )
 
 # Definición de rutas base y directorios de salida
@@ -200,19 +219,19 @@ plt.show()"""
             "contenido": f"""---
 ## 3. Hábitos Dietarios y Validación del Algoritmo de Riesgo
 
-- **Gradiente Dosis–Respuesta Monótono**: Prueba de Jonckheere–Terpstra ($JT$) para contrastar tendencias crecientes/decrecientes ordenadas por frecuencia de consumo.
-- **Mosaicos Dietarios ("Todo en Uno")**: Formato facetado en cuadrícula (`layout="grid"`) o consolidado horizontal (`layout="consolidated"`), adoptando la paleta editorial predefinida.
+- **Gradiente Dosis–Respuesta**: Análisis de tendencia ordinal (no paramétrico con Jonckheere–Terpstra o paramétrico con Pearson).
+- **Mosaicos Dietarios ("Todo en Uno")**: Formato facetado en cuadrícula (`layout="grid"`), con contrastes estadísticos seleccionables.
 - **Perfil Multivariante Polar (Radar / Spider Chart)**: Comparación de patrones alimentarios mediante `ax.set_thetagrids()` estratificada por mediana o terciles de concentración.
 - **Validación del Score de Riesgo**: Regresión empírica frente al biomarcador biológico con bandas de confianza al 95%."""
         },
         {
             "tipo": "code",
-            "contenido": f"""# 2.1 Tendencia Monótona Ordinal: Frecuencia de Consumo de {nombre_dieta} vs {nombre}
+            "contenido": f"""# 2.1 Tendencia Ordinal: Frecuencia de Consumo de {nombre_dieta} vs {nombre}
 fig_dieta, ax_dieta = bp.plot_dietary(
     ordinal_col="{col_dieta}",
     metal="{col_conc}",
+    method="nonparametric",  # o "parametric"
     show_points=True,
-    title="Gradiente Ordinal de Ingesta de {nombre_dieta} vs {nombre} Sérico (Jonckheere–Terpstra)",
     filepath=str(salidas_graficos / "tendencia_ordinal_{key}_{col_dieta}.png")
 )
 fig_dieta.savefig(salidas_graficos / "tendencia_ordinal_{key}_{col_dieta}.pdf", dpi=300, bbox_inches="tight")
@@ -223,22 +242,12 @@ plt.show()"""
             "contenido": f"""# 2.2 Mosaico Dietario Multivariable Facetado: Todos los Grupos de Alimentos vs {nombre}
 fig_diet_grid, axes_diet_grid = bp.plot_diet_boxplots(
     metal="{col_conc}",
+    method="nonparametric",  # o "parametric"
     layout="grid",
     ncols=4,
     filepath=str(salidas_graficos / "mosaico_dietario_grid_{key}.png")
 )
 fig_diet_grid.savefig(salidas_graficos / "mosaico_dietario_grid_{key}.pdf", dpi=300, bbox_inches="tight")
-plt.show()"""
-        },
-        {
-            "tipo": "code",
-            "contenido": f"""# 2.3 Diagrama Dietario Consolidado Horizontal (Frecuente/Diario vs Ocasional/Nunca)
-fig_diet_cons, ax_diet_cons = bp.plot_diet_boxplots(
-    metal="{col_conc}",
-    layout="consolidated",
-    filepath=str(salidas_graficos / "diagrama_dietario_consolidado_{key}.png")
-)
-fig_diet_cons.savefig(salidas_graficos / "diagrama_dietario_consolidado_{key}.pdf", dpi=300, bbox_inches="tight")
 plt.show()"""
         },
         {
@@ -374,9 +383,124 @@ fig_fn_corr, ax_fn_corr = correlation_analysis_plot(
     y="{col_conc}",
     title="Llamada Funcional Directa: correlation_analysis_plot()"
 )
+plt.show()"""
+        },
+        {
+            "tipo": "markdown",
+            "contenido": f"""---
+## 6. Análisis de Similitud Dietaria y Contrastes de Subcohorte de Alta Carga Corporal ({nombre})
+
+- **Ranking de Similitud (`similarity_ranking_plot`)**: Ordenación de frecuencias dietarias por coeficiente de correlación con {nombre}.
+- **Contraste de Subcohorte (`subcohort_contrast_plot`)**: Contraste de la categoría modal de mayor consumo vs. el resto de la cohorte con pruebas no paramétricas (Mann–Whitney $U$) o paramétricas ($t$ de Welch).
+- **Tamizaje Sistemático de Contrastes (`scan_subcohort_contrasts`)**: Evaluación automatizada en toda la batería de alimentos para identificar asociaciones significativas ($p < 0.05$).
+- **Consenso de Factores Compartidos (`shared_factors_plot`)**: Minería de covariables de exposición compartidas en el estrato de mayor carga.
+- **Mosaico Integrado de Subcohorte (`subcohort_mosaic_plot`)**: Panel multipanel consolidado (A, B y C)."""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""# 5.1 Ranking de Similitud Dietaria frente a la Concentración Sérica de {nombre}
+fig_sim, ax_sim, df_sim = bp.similarity_ranking_plot(
+    target_metal="{col_conc}",
+    method="nonparametric",
+    title="Ranking de Asociación Dietaria vs Concentración de {nombre}",
+    filepath=str(salidas_graficos / "ranking_similitud_{key}.png")
+)
+fig_sim.savefig(salidas_graficos / "ranking_similitud_{key}.pdf", dpi=300, bbox_inches="tight")
+plt.show()"""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""# 5.2 Contraste de Subcohorte: Categoría Modal de Consumo de {nombre_dieta} vs Resto de la Muestra
+fig_contrast, ax_contrast, res_contrast = bp.subcohort_contrast_plot(
+    target_metal="{col_conc}",
+    criterion_col="{col_dieta}",
+    criterion_val=None,  # Selecciona automáticamente la categoría modal de mayor frecuencia
+    method="nonparametric",  # Admite "nonparametric" o "parametric"
+    annotate_ids=False,
+    title="Contraste de Carga Corporal: {nombre} ({nombre_dieta} Modal vs Resto)",
+    filepath=str(salidas_graficos / "contraste_subcohorte_{key}_{col_dieta}.png")
+)
+fig_contrast.savefig(salidas_graficos / "contraste_subcohorte_{key}_{col_dieta}.pdf", dpi=300, bbox_inches="tight")
+plt.show()"""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""# 5.3 Tamizaje Sistemático de Contrastes Dietarios Significativos (p < 0.05)
+df_scan = bp.scan_subcohort_contrasts(
+    target_metal="{col_conc}",
+    method="nonparametric",
+    alpha=0.05,
+    plot_significant=False,
+)
+print(f"Tamizaje de contrastes completado ({{len(df_scan)}} variables evaluadas):")
+display(df_scan.head(10))"""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""# 5.4 Minería de Factores de Riesgo Compartidos en el Estrato Crítico de {nombre}
+fig_shared, ax_shared, df_shared = bp.shared_factors_plot(
+    target_metal="{col_conc}",
+    filepath=str(salidas_graficos / "factores_compartidos_{key}.png")
+)
+fig_shared.savefig(salidas_graficos / "factores_compartidos_{key}.pdf", dpi=300, bbox_inches="tight")
+plt.show()"""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""# 5.5 Mosaico Editorial Integrado de Subcohorte (Ranking + Contraste + Factores)
+fig_sub_mosaic, axes_sub_mosaic, res_sub_mosaic = bp.subcohort_mosaic_plot(
+    target_metal="{col_conc}",
+    criterion_col="{col_dieta}",
+    filepath=str(salidas_graficos / "mosaico_subcohorte_editorial_{key}.png")
+)
+fig_sub_mosaic.savefig(salidas_graficos / "mosaico_subcohorte_editorial_{key}.pdf", dpi=300, bbox_inches="tight")
+plt.show()"""
+        },
+        {
+            "tipo": "markdown",
+            "contenido": f"""---
+## 7. Radiografía Epidemiológica de la Encuesta y Matriz de Síntesis Normalizada ({nombre})
+
+- **Mapas de Calor Normalizados (`survey_block_heatmap`)**: Columnas escaladas en $[0.0 - 1.0]$, columna totalizadora separada y corte visual por percentiles ($\\leq P_{{25}}$, $P_{{25}} - P_{{75}}$, $\\geq P_{{75}}$) según la concentración de {nombre}.
+- **Suite Completa de 7 Bloques (`plot_survey_radiography`)**: Generación masiva automatizada de los 7 paneles temáticos a 300 DPI (PNG y PDF).
+- **Matriz de Síntesis Ejecutiva (`plot_survey_synthesis`)**: Visualización consolidada de exposición total normalizada clasificada en orden ascendente de biomarcador plasmático."""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""# 6.1 Radiografía Temática: Bloque 4 de Hábitos Dietarios
+res_b4 = bp.plot_survey_radiography(
+    target_metal="{col_conc}",
+    blocks=["bloque4_dieta"],
+    output_dir=salidas_graficos,
+    show=True,
+    dpi=300
+)"""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""# 6.2 Generación Masiva Automatizada de la Suite de 7 Bloques de la Encuesta a 300 DPI
+suite_radiografia = bp.plot_survey_radiography(
+    target_metal="{col_conc}",
+    output_dir=salidas_graficos,
+    show=False,
+    dpi=300
+)
+print("Suite completa de radiografía generada exitosamente:")
+for bloq_k in suite_radiografia.keys():
+    print(f"  -> {{bloq_k}} exportado a {{salidas_graficos}} (PNG y PDF)")"""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""# 6.3 Matriz Ejecutiva de Síntesis Global: Exposición Multidominio clasificada por {nombre}
+fig_sintesis, ax_sintesis = bp.plot_survey_synthesis(
+    target_metal="{col_conc}",
+    output_dir=salidas_graficos,
+    show=True,
+    dpi=300
+)
 plt.show()
 
-print(f"\\n¡Figuras bivariantes de {nombre} guardadas exitosamente en:\\n  -> {{salidas_graficos.resolve()}}")"""
+print(f"\\n¡Todas las figuras y radiografías bivariantes de {nombre} fueron generadas y exportadas con éxito en:\\n  -> {{salidas_graficos.resolve()}}")"""
         }
     ]
 

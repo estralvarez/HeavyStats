@@ -48,3 +48,29 @@ def test_app_instantiation():
     app = HeavyStatsApp()
     assert app.TITLE == "HeavyStats Studio"
 
+
+def test_notebook_templates_generation():
+    import json
+    from heavystats.studio.templates import (
+        generar_cuaderno_univariante_graficos,
+        generar_cuaderno_bivariante_graficos,
+    )
+    for metal in ["plomo", "mercurio", "cadmio"]:
+        cfg = METALES_CONFIG[metal]
+        nb_u = generar_cuaderno_univariante_graficos(cfg)
+        assert nb_u.exists()
+        content_u = json.loads(nb_u.read_text(encoding="utf-8"))
+        assert "cells" in content_u
+        source_u = "".join("".join(c["source"]) for c in content_u["cells"])
+        assert "percentile_mask" in source_u
+
+        nb_b = generar_cuaderno_bivariante_graficos(cfg)
+        assert nb_b.exists()
+        content_b = json.loads(nb_b.read_text(encoding="utf-8"))
+        assert "cells" in content_b
+        source_b = "".join("".join(c["source"]) for c in content_b["cells"])
+        assert "subcohort_contrast_plot" in source_b
+        assert "survey_radiography_plot" in source_b
+        assert "similarity_ranking_plot" in source_b
+        assert "scan_subcohort_contrasts" in source_b
+

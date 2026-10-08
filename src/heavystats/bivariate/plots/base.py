@@ -14,6 +14,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from heavystats.univariate.plots.base import BasePlots
 from heavystats.univariate.constants import (
     DEFAULT_LABELS_MAP,
     DEFAULT_CUSTOM_PARAMS,
@@ -58,55 +59,46 @@ DEFAULT_REFERENCE_LABELS: Dict[str, str] = {
 }
 
 
-class BivariateBasePlots:
+class BivariateBasePlots(BasePlots):
     """
     Clase base con la infraestructura común de configuración gráfica,
     resolución semántica de variables, etiquetado y utilidades DRY.
+    Hereda del motor BasePlots para soportar canvas, mosaicos y estilizado editorial unificado.
     """
 
     def __init__(
         self,
-        df: pd.DataFrame,
+        df: Optional[pd.DataFrame] = None,
         palette: Union[str, Sequence[str]] = "crest",
         style: str = "ticks",
         context: str = "notebook",
         labels_map: Optional[Dict[str, str]] = None,
         rc: Optional[Dict[str, Any]] = None,
     ):
-        self.df = df.copy()
-
-        # Consolidación definitiva de Exposicion_Lugares_canale en Exposicion_Lugares_canales
-        if "Exposicion_Lugares_canale" in self.df.columns:
-            if "Exposicion_Lugares_canales" in self.df.columns:
-                self.df["Exposicion_Lugares_canales"] = (
-                    self.df[["Exposicion_Lugares_canales", "Exposicion_Lugares_canale"]]
-                    .fillna(0)
-                    .max(axis=1)
-                    .astype("Int64")
-                )
-                self.df = self.df.drop(columns=["Exposicion_Lugares_canale"])
-            else:
-                self.df = self.df.rename(columns={"Exposicion_Lugares_canale": "Exposicion_Lugares_canales"})
-
-        self.palette = palette
-        self.style = style
-        self.context = context
-        self.labels_map = DEFAULT_LABELS_MAP.copy()
-        if labels_map is not None:
-            self.labels_map.update(labels_map)
-
-        self.rc = DEFAULT_CUSTOM_PARAMS.copy()
-        if rc is not None:
-            self.rc.update(rc)
-
-        sns.set_theme(
-            style=self.style,
-            palette=self.palette if isinstance(self.palette, str) else None,
-            rc=self.rc,
-            context=self.context,
+        super().__init__(
+            df=df,
+            palette=palette if isinstance(palette, str) else "crest",
+            style=style,
+            context=context,
+            labels_map=labels_map,
+            rc=rc,
         )
-        plt.rcParams["figure.dpi"] = 300
-        plt.rcParams["savefig.bbox"] = "tight"
+        if isinstance(palette, (list, tuple)):
+            self.palette = palette
+
+        if self.df is not None:
+            # Consolidación definitiva de Exposicion_Lugares_canale en Exposicion_Lugares_canales
+            if "Exposicion_Lugares_canale" in self.df.columns:
+                if "Exposicion_Lugares_canales" in self.df.columns:
+                    self.df["Exposicion_Lugares_canales"] = (
+                        self.df[["Exposicion_Lugares_canales", "Exposicion_Lugares_canale"]]
+                        .fillna(0)
+                        .max(axis=1)
+                        .astype("Int64")
+                    )
+                    self.df = self.df.drop(columns=["Exposicion_Lugares_canale"])
+                else:
+                    self.df = self.df.rename(columns={"Exposicion_Lugares_canale": "Exposicion_Lugares_canales"})
 
     def get_label(self, col: str) -> str:
         """Obtiene la etiqueta limpia de una variable."""
@@ -120,6 +112,8 @@ class BivariateBasePlots:
 
     def _resolve_column(self, col: str) -> str:
         """Resuelve el nombre exacto de una columna en el DataFrame admitiendo alias comunes y formato enriquecido."""
+        if self.df is None:
+            return col
         clean_c = str(col).replace("**", "").replace("<strong>", "").replace("</strong>", "").strip()
         if clean_c in self.df.columns:
             return clean_c
@@ -136,10 +130,16 @@ class BivariateBasePlots:
         alias_map = {
             "plomo": "Plomo_ug_dL",
             "pb": "Plomo_ug_dL",
+            "lead": "Plomo_ug_dL",
+            "plomo_ug_dl": "Plomo_ug_dL",
             "mercurio": "Mercurio_ug_L",
             "hg": "Mercurio_ug_L",
+            "mercury": "Mercurio_ug_L",
+            "mercurio_ug_l": "Mercurio_ug_L",
             "cadmio": "Cadmio_ug_L",
             "cd": "Cadmio_ug_L",
+            "cadmium": "Cadmio_ug_L",
+            "cadmio_ug_l": "Cadmio_ug_L",
             "edad": "Edad",
             "age": "Edad",
             "peso": "Peso_kg",
@@ -218,17 +218,45 @@ class BivariateBasePlots:
         ax.tick_params(axis="both", labelsize=labelsize)
 
     @staticmethod
-    def _save_figure(fig: plt.Figure, filepath: Optional[str] = None, dpi: int = 300, close: bool = False) -> None:
-        """Exporta de forma robusta la figura en alta resolución (PNG/PDF) aplicando tight_layout."""
+    def _save_figure(
+        fig: plt.Figure,
+        base_name_or_filepath: Optional[str] = None,
+        save_dir: Optional[str] = None,
+        formats: Union[str, Sequence[str]] = "png",
+        dpi: int = 300,
+        close: bool = False,
+        filepath: Optional[str] = None,
+        save_format: Optional[Union[str, Sequence[str]]] = None,
+    ) -> None:
+        """
+        Exporta de forma robusta la figura en alta resolución (PNG/PDF) aplicando tight_layout.
+        Compatible con ambas convenciones:
+        - Bivariante directa: `_save_figure(fig, filepath=...)` o `_save_figure(fig, "ruta/archivo.png")`
+        - Univariante modular: `_save_figure(fig, base_name, save_dir=..., formats=...)`
+        """
         try:
             fig.tight_layout()
         except Exception:
             pass
-        if filepath:
-            dir_path = os.path.dirname(filepath)
+
+        target_file = filepath or base_name_or_filepath
+        active_formats = save_format if save_format is not None else formats
+
+        # Si se especifica save_dir, se utiliza la convención BasePlots (guardado en múltiples formatos)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            name = base_name_or_filepath or "figura"
+            fmt_list = [active_formats] if isinstance(active_formats, str) else list(active_formats)
+            for fmt in fmt_list:
+                clean_fmt = fmt.lstrip(".").lower()
+                out_path = os.path.join(save_dir, f"{name}.{clean_fmt}")
+                fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        elif target_file:
+            dir_path = os.path.dirname(target_file)
             if dir_path:
                 os.makedirs(dir_path, exist_ok=True)
-            fig.savefig(filepath, dpi=dpi, bbox_inches="tight")
+            fig.savefig(target_file, dpi=dpi, bbox_inches="tight")
+
         if close:
             plt.close(fig)
 

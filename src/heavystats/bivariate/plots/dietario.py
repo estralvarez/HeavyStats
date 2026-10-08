@@ -8,6 +8,7 @@ import math
 from typing import List, Dict, Optional, Any, Tuple, Union, Sequence
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import seaborn as sns
@@ -35,6 +36,7 @@ class DietarioPlotsMixin:
         self: BivariateBasePlots,
         ordinal_col: str,
         metal: str,
+        method: str = "nonparametric",
         ordinal_map: Optional[Dict[str, int]] = None,
         log_scale: bool = False,
         show_points: bool = True,
@@ -49,7 +51,19 @@ class DietarioPlotsMixin:
     ) -> Tuple[plt.Figure, plt.Axes]:
         """
         Gráfico de tendencia ordinal (boxplots ordenados de menor a mayor frecuencia)
-        para evaluar tendencias monótonas de exposición dietaria con la prueba de Jonckheere-Terpstra.
+        para evaluar gradientes de exposición dietaria frente a biomarcadores.
+
+        Parameters
+        ----------
+        ordinal_col : str
+            Variable de consumo o escala ordinal (ej. 'Alim_Carnes').
+        metal : str
+            Biomarcador de concentración ('Plomo_ug_dL', 'Mercurio_ug_L', 'Cadmio_ug_L', etc.).
+        method : str, default="nonparametric"
+            Método inferencial de tendencia:
+            - 'nonparametric' / 'jonckheere': Prueba de Jonckheere–Terpstra (z, p-valor).
+            - 'parametric' / 'pearson': Correlación lineal de Pearson (r, p-valor).
+            - 'anova': Análisis de varianza (F, p-valor).
         """
         ord_resolved = self._resolve_column(ordinal_col)
         metal_resolved = self._resolve_column(metal)
@@ -151,8 +165,15 @@ class DietarioPlotsMixin:
         if log_scale:
             metal_axis_lbl += " (Escala Log)"
 
+        is_parametric = str(method).lower() in ["parametric", "paramétrico", "pearson", "anova", "f"]
+        is_anova = str(method).lower() in ["anova", "f"]
+
         if title is not None:
             ax.set_title(title, fontsize=11, fontweight="bold", pad=14)
+        else:
+            test_tag = "ANOVA" if is_anova else ("Pearson" if is_parametric else "Jonckheere–Terpstra")
+            ax.set_title(f"Gradiente de Ingesta: {var_lbl} vs {metal_axis_lbl} ({test_tag})", fontsize=11, fontweight="bold", pad=14)
+
         ax.set_xlabel(f"Gradiente Ordinal de {var_lbl}", fontsize=10.5, fontweight="bold", labelpad=8)
         ax.set_ylabel(metal_axis_lbl, fontsize=10.5, fontweight="bold", labelpad=8)
 
@@ -170,13 +191,33 @@ class DietarioPlotsMixin:
             y_top_limit = y_bracket + 0.12 * y_span
 
             groups_vals = [sub_df[sub_df[plot_x_col] == lvl][metal_resolved].values for lvl in ordered_levels]
-            jt = jonckheere_terpstra_test(groups_vals)
-            p_val = jt.get("p_val", jt.get("p_value", np.nan))
-            z_score = jt.get("z_stat", jt.get("z_score", np.nan))
 
-            p_str = self._format_p_val(p_val, threshold=0.0001, precision=4)
-            z_str = rf"$z = {z_score:+.2f}$" if pd.notna(z_score) else ""
-            stat_text = f"Tendencia Monótona (Jonckheere–Terpstra): {z_str}  |  {p_str}"
+            if is_parametric:
+                if is_anova:
+                    f_stat, p_val = stats.f_oneway(*groups_vals)
+                    f_val = float(f_stat) if pd.notna(f_stat) else 0.0
+                    p_val = float(p_val) if pd.notna(p_val) else 1.0
+                    p_str = self._format_p_val(p_val, threshold=0.0001, precision=4)
+                    f_str = f"$F = {f_val:.2f}$"
+                    stat_text = f"Gradiente Paramétrico (ANOVA): {f_str}  |  {p_str}"
+                else:
+                    x_vals = pd.to_numeric(sub_df[plot_x_col], errors="coerce")
+                    y_vals = pd.to_numeric(sub_df[metal_resolved], errors="coerce")
+                    valid_xy = x_vals.notna() & y_vals.notna()
+                    if valid_xy.sum() >= 3:
+                        r_val, p_val = stats.pearsonr(x_vals[valid_xy], y_vals[valid_xy])
+                    else:
+                        r_val, p_val = 0.0, 1.0
+                    p_str = self._format_p_val(p_val, threshold=0.0001, precision=4)
+                    r_str = f"$r = {r_val:+.2f}$"
+                    stat_text = f"Gradiente Lineal (Pearson): {r_str}  |  {p_str}"
+            else:
+                jt = jonckheere_terpstra_test(groups_vals)
+                p_val = jt.get("p_val", jt.get("p_value", np.nan))
+                z_score = jt.get("z_stat", jt.get("z_score", np.nan))
+                p_str = self._format_p_val(p_val, threshold=0.0001, precision=4)
+                z_str = rf"$z = {z_score:+.2f}$" if pd.notna(z_score) else ""
+                stat_text = f"Tendencia Monótona (Jonckheere–Terpstra): {z_str}  |  {p_str}"
 
             ax.plot([0, 0, len(ordered_levels)-1, len(ordered_levels)-1], [y_bracket - h_bracket, y_bracket, y_bracket, y_bracket - h_bracket], lw=1.1, c="#334155")
             ax.text(
@@ -425,6 +466,7 @@ class DietarioPlotsMixin:
         self: BivariateBasePlots,
         metal: str = "Plomo_ug_dL",
         dietary_cols: Optional[Sequence[str]] = None,
+        method: str = "nonparametric",
         layout: str = "grid",
         ncols: int = 4,
         palette: Optional[Union[str, Sequence[str]]] = None,
@@ -434,8 +476,38 @@ class DietarioPlotsMixin:
     ) -> Tuple[plt.Figure, Any]:
         """
         Mosaico integrado editorial de boxplots para todos los hábitos alimenticios
-        vs la concentración del metal pesado, con prueba de Jonckheere-Terpstra.
+        vs la concentración del metal pesado, con prueba inferencial seleccionable.
+
+        Parameters
+        ----------
+        metal : str, default="Plomo_ug_dL"
+            Biomarcador o metal a evaluar.
+        dietary_cols : Sequence[str], optional
+            Columnas de dieta (por defecto las que inician con 'Alim_').
+        method : str, default="nonparametric"
+            Método inferencial de contraste:
+            - 'nonparametric' / 'jonckheere': Tendencia ordinal de Jonckheere–Terpstra (z, p-valor).
+            - 'parametric' / 'pearson': Correlación lineal de Pearson (r, p-valor).
+            - 'anova': Análisis de varianza (F, p-valor).
+        layout : str, default="grid"
+            Distribución visual (modo facetado 'grid'). El modo 'consolidated' ha sido eliminado.
+        ncols : int, default=4
+            Número de columnas en la cuadrícula.
+        palette : str or list, optional
+            Paleta de colores.
+        figsize : tuple, optional
+            Dimensiones de la figura.
+        filepath : str, optional
+            Ruta para guardar la imagen.
         """
+        if str(layout).lower() == "consolidated":
+            raise ValueError(
+                "El layout 'consolidated' ha sido eliminado de la librería bivariante. "
+                "Utilice el layout 'grid' para el mosaico multivariable facetado."
+            )
+        if str(layout).lower() != "grid":
+            raise ValueError(f"Layout '{layout}' no reconocido. Opciones disponibles: 'grid'.")
+
         metal_resolved = self._resolve_column(metal)
         if metal_resolved not in self.df.columns:
             raise KeyError(f"La columna de metal '{metal}' no se encuentra en el DataFrame.")
@@ -453,167 +525,103 @@ class DietarioPlotsMixin:
         metal_axis_lbl = DEFAULT_BIOMEDICAL_METAL_LABELS.get(metal_resolved, self.get_label(metal_resolved))
         active_palette = palette or self.palette
 
-        if layout == "grid":
-            n_plots = len(dietary_cols)
-            nrows = math.ceil(n_plots / ncols)
-            calc_figsize = figsize if figsize is not None else (16.0, 2.9 * nrows)
+        n_plots = len(dietary_cols)
+        nrows = math.ceil(n_plots / ncols)
+        calc_figsize = figsize if figsize is not None else (16.0, 2.9 * nrows)
 
-            fig, axes = plt.subplots(nrows, ncols, figsize=calc_figsize, sharey=True, dpi=kwargs.get("dpi", 200))
-            flat_axes = np.array(axes).flatten()
+        fig, axes = plt.subplots(nrows, ncols, figsize=calc_figsize, sharey=True, dpi=kwargs.get("dpi", 200))
+        flat_axes = np.array(axes).flatten()
 
-            for idx, col in enumerate(dietary_cols):
-                ax = flat_axes[idx]
-                sub = clean_df[[col, metal_resolved]].dropna().copy()
-                clean_name = col.replace("Alim_", "").replace("_", " ").title()
+        is_parametric = str(method).lower() in ["parametric", "paramétrico", "pearson", "anova", "f"]
+        is_anova = str(method).lower() in ["anova", "f"]
 
-                ordered_levels = sorted(sub[col].unique())
-                groups_vals = [sub[sub[col] == lvl][metal_resolved].values for lvl in ordered_levels]
+        for idx, col in enumerate(dietary_cols):
+            ax = flat_axes[idx]
+            sub = clean_df[[col, metal_resolved]].dropna().copy()
+            clean_name = col.replace("Alim_", "").replace("_", " ").title()
 
+            ordered_levels = sorted(sub[col].unique())
+            groups_vals = [sub[sub[col] == lvl][metal_resolved].values for lvl in ordered_levels]
+
+            if is_parametric:
+                if is_anova:
+                    f_stat, p_val = stats.f_oneway(*groups_vals)
+                    f_val = float(f_stat) if pd.notna(f_stat) else 0.0
+                    p_val = float(p_val) if pd.notna(p_val) else 1.0
+                    p_str = self._format_p_val(p_val, threshold=0.001)
+                    stat_ann = f" ($F={f_val:.2f}$, {p_str})"
+                else:
+                    x_vals = pd.to_numeric(sub[col], errors="coerce")
+                    y_vals = pd.to_numeric(sub[metal_resolved], errors="coerce")
+                    valid_xy = x_vals.notna() & y_vals.notna()
+                    if valid_xy.sum() >= 3:
+                        r_val, p_val = stats.pearsonr(x_vals[valid_xy], y_vals[valid_xy])
+                    else:
+                        r_val, p_val = 0.0, 1.0
+                    p_str = self._format_p_val(p_val, threshold=0.001)
+                    r_str = f"r={r_val:+.2f}" if pd.notna(r_val) else ""
+                    stat_ann = f" (${r_str}$, {p_str})" if r_str else f" ({p_str})"
+            else:
                 jt = jonckheere_terpstra_test(groups_vals)
                 p_val = jt.get("p_val", jt.get("p_value", np.nan))
                 z_score = jt.get("z_stat", jt.get("z_score", np.nan))
                 p_str = self._format_p_val(p_val, threshold=0.001)
                 z_str = f"z={z_score:+.2f}" if pd.notna(z_score) else ""
-
-                sns.boxplot(
-                    data=sub,
-                    x=col,
-                    y=metal_resolved,
-                    hue=col,
-                    legend=False,
-                    palette=active_palette,
-                    ax=ax,
-                    width=0.45,
-                    boxprops=dict(alpha=0.75, edgecolor="#334155", linewidth=1.1),
-                    medianprops=dict(color="#0f172a", linewidth=2.0),
-                    whiskerprops=dict(color="#475569", linewidth=1.1),
-                    capprops=dict(color="#475569", linewidth=1.1),
-                    showfliers=False,
-                )
-
-                sns.stripplot(
-                    data=sub,
-                    x=col,
-                    y=metal_resolved,
-                    color="#b91c1c",
-                    alpha=0.90,
-                    size=5.2,
-                    jitter=0.15,
-                    edgecolor="#ffffff",
-                    linewidth=0.5,
-                    ax=ax,
-                )
-
-                letter = chr(ord('A') + idx) if idx < 26 else str(idx + 1)
                 stat_ann = f" (${z_str}$, {p_str})" if z_str else f" ({p_str})"
-                ax.set_title(f"{letter}. {clean_name}{stat_ann}", fontsize=10.0, fontweight="bold", pad=8, color="#0f172a")
 
-                ax.set_xlabel("")
-                if idx % ncols == 0:
-                    ax.set_ylabel(metal_axis_lbl, fontsize=9.5, fontweight="bold")
-                else:
-                    ax.set_ylabel("")
-
-                x_ticks = range(len(ordered_levels))
-                ax.set_xticks(x_ticks)
-                ax.set_xticklabels([compact_labels.get(int(lvl), str(lvl)) for lvl in ordered_levels], fontsize=8.5, fontweight="bold")
-                for tick in ax.get_yticklabels():
-                    tick.set_fontweight("bold")
-
-                ax.spines["top"].set_visible(False)
-                ax.spines["right"].set_visible(False)
-                ax.grid(axis="y", linestyle=":", alpha=0.5)
-
-            for j in range(n_plots, len(flat_axes)):
-                flat_axes[j].set_visible(False)
-
-            ret_axes = axes
-
-        elif layout == "consolidated":
-            records = []
-            for col in dietary_cols:
-                food_name = col.replace("Alim_", "").replace("_", " ").title()
-                for _, row in clean_df[[col, metal_resolved]].dropna().iterrows():
-                    freq_code = int(row[col])
-                    freq_label = "Frecuente / Diario (≥3)" if freq_code >= 3 else "Ocasional / Nunca (≤2)"
-                    records.append({
-                        "Alimento": food_name,
-                        "Metal": row[metal_resolved],
-                        "Frecuencia": freq_label,
-                    })
-
-            long_df = pd.DataFrame(records)
-            calc_figsize = figsize if figsize is not None else (10.0, 8.0)
-            fig, ax = plt.subplots(figsize=calc_figsize, dpi=kwargs.get("dpi", 200))
-
-            if isinstance(palette, dict):
-                cat_palette = palette
-            elif isinstance(palette, (list, tuple)) and len(palette) >= 2:
-                cat_palette = {"Ocasional / Nunca (≤2)": palette[0], "Frecuente / Diario (≥3)": palette[1]}
-            elif palette is not None or self.palette is not None:
-                pal_candidate = palette or self.palette
-                if isinstance(pal_candidate, str):
-                    try:
-                        colors = sns.color_palette(pal_candidate, 2)
-                        cat_palette = {"Ocasional / Nunca (≤2)": colors[0], "Frecuente / Diario (≥3)": colors[1]}
-                    except Exception:
-                        cat_palette = {"Ocasional / Nunca (≤2)": "#0f766e", "Frecuente / Diario (≥3)": "#b91c1c"}
-                elif isinstance(pal_candidate, (list, tuple)) and len(pal_candidate) >= 2:
-                    cat_palette = {"Ocasional / Nunca (≤2)": pal_candidate[0], "Frecuente / Diario (≥3)": pal_candidate[1]}
-                else:
-                    cat_palette = {"Ocasional / Nunca (≤2)": "#0f766e", "Frecuente / Diario (≥3)": "#b91c1c"}
-            else:
-                cat_palette = {"Ocasional / Nunca (≤2)": "#0f766e", "Frecuente / Diario (≥3)": "#b91c1c"}
             sns.boxplot(
-                data=long_df,
-                y="Alimento",
-                x="Metal",
-                hue="Frecuencia",
-                palette=cat_palette,
+                data=sub,
+                x=col,
+                y=metal_resolved,
+                hue=col,
+                legend=False,
+                palette=active_palette,
                 ax=ax,
-                width=0.60,
-                boxprops=dict(alpha=0.75, linewidth=1.1),
-                medianprops=dict(linewidth=1.8, color="#0f172a"),
-                whiskerprops=dict(linewidth=1.1),
-                capprops=dict(linewidth=1.1),
+                width=0.45,
+                boxprops=dict(alpha=0.75, edgecolor="#334155", linewidth=1.1),
+                medianprops=dict(color="#0f172a", linewidth=2.0),
+                whiskerprops=dict(color="#475569", linewidth=1.1),
+                capprops=dict(color="#475569", linewidth=1.1),
                 showfliers=False,
             )
 
             sns.stripplot(
-                data=long_df,
-                y="Alimento",
-                x="Metal",
-                hue="Frecuencia",
-                dodge=True,
-                palette={"Ocasional / Nunca (≤2)": "#042f2e", "Frecuente / Diario (≥3)": "#7f1d1d"},
-                alpha=0.80,
-                size=4.2,
-                jitter=0.20,
+                data=sub,
+                x=col,
+                y=metal_resolved,
+                color="#b91c1c",
+                alpha=0.90,
+                size=5.2,
+                jitter=0.15,
+                edgecolor="#ffffff",
+                linewidth=0.5,
                 ax=ax,
-                legend=False,
             )
 
-            ax.set_xlabel(metal_axis_lbl, fontsize=10.5, fontweight="bold", labelpad=8)
-            ax.set_ylabel("Hábito Alimenticio", fontsize=10.5, fontweight="bold", labelpad=8)
-            self._clean_spines_and_ticks(ax)
-            ax.grid(axis="x", linestyle=":", alpha=0.6)
+            letter = chr(ord('A') + idx) if idx < 26 else str(idx + 1)
+            ax.set_title(f"{letter}. {clean_name}{stat_ann}", fontsize=10.0, fontweight="bold", pad=8, color="#0f172a")
 
-            ax.legend(
-                title="Patrón de Ingesta",
-                title_fontsize=9.5,
-                fontsize=9.0,
-                loc="lower right",
-                frameon=True,
-                facecolor="#f8fafc",
-                edgecolor="#cbd5e1",
-            )
+            ax.set_xlabel("")
+            if idx % ncols == 0:
+                ax.set_ylabel(metal_axis_lbl, fontsize=9.5, fontweight="bold")
+            else:
+                ax.set_ylabel("")
 
-            ret_axes = ax
-        else:
-            raise ValueError(f"Layout '{layout}' no soportado. Use 'grid' o 'consolidated'.")
+            x_ticks = range(len(ordered_levels))
+            ax.set_xticks(x_ticks)
+            ax.set_xticklabels([compact_labels.get(int(lvl), str(lvl)) for lvl in ordered_levels], fontsize=8.5, fontweight="bold")
+            for tick in ax.get_yticklabels():
+                tick.set_fontweight("bold")
+
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.grid(axis="y", linestyle=":", alpha=0.5)
+
+        for j in range(n_plots, len(flat_axes)):
+            flat_axes[j].set_visible(False)
 
         self._save_figure(fig, filepath=filepath)
-        return fig, ret_axes
+        return fig, axes
 
     def risk_algorithm_plots(
         self: BivariateBasePlots,

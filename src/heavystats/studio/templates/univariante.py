@@ -200,15 +200,17 @@ print(f"Motor UnivariatePlots listo para generación de figuras de {nombre} a 30
         {
             "tipo": "markdown",
             "contenido": f"""---
-## 2. Pipeline de Distribución: Boxplot e Histograma de {nombre} con Límite {entidad}
+## 2. Pipeline de Distribución: Boxplot e Histograma de {nombre} con Límite {entidad} y Máscara de Percentiles
 
-Visualización integrada en dos paneles coordinados que combina la dispersión individual (jitter points), cuartiles, mediana, histograma con KDE y el umbral de referencia toxicológico ({limite} {unidad}) con escala natural y logarítmica."""
+Visualización integrada en dos paneles coordinados que combina la dispersión individual (jitter points), cuartiles, mediana, histograma con KDE, umbral de referencia toxicológico ({limite} {unidad}) y **máscara de estratificación por percentiles** ($\\leq P_{{25}}$, $> P_{{25}} \\text{{ y }} < P_{{75}}$, $\\geq P_{{75}}$) con bandas sombreadas, líneas verticales y conteo de muestras con porcentajes."""
         },
         {
             "tipo": "code",
-            "contenido": f"""# Pipeline de Distribución con límite permisible y escala logarítmica
+            "contenido": f"""# Pipeline de Distribución con límite permisible, escala natural y máscara de percentiles
 figs_metal = uplots.plot_distribucion(
     columns="{col_conc}",
+    percentile_mask=True,
+    show_limit=True,
     log_scale=False,
     color="#2b6cb0",
     save_dir=str(salidas_graficos),
@@ -217,7 +219,15 @@ figs_metal = uplots.plot_distribucion(
     bins=5,
     dpi=300
 )
-plt.show()"""
+plt.show()
+
+# Resumen analítico de los estratos percentilares de {nombre}
+mascara_info = uplots.obtener_mascara_percentiles(column="{col_conc}")
+print("Estratificación por percentiles (<=P25, P25-P75, >=P75):")
+print(f"  P25 = {{mascara_info['p_lower']:.3f}}, P75 = {{mascara_info['p_upper']:.3f}}")
+for estrato, count in mascara_info['counts'].items():
+    pct = mascara_info['percentages'][estrato]
+    print(f"  {{estrato}}: n={{count}} ({{pct:.1f}}%)")"""
         },
         {
             "tipo": "markdown",

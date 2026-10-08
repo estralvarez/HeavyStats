@@ -1,6 +1,6 @@
 [project]
 name = "heavystats"
-version = "0.4.4"
+version = "0.4.5"
 description = "Paquete estadístico para análisis y biomonitoreo de metales pesados en salud infantil"
 readme = "README.md"
 license = "MIT"
@@ -42,6 +42,7 @@ dependencies = [
     "matplotlib>=3.8.0",
     "openpyxl>=3.1.0",
     "textual>=8.2.8",
+    "scikit-learn>=1.9.1",
 ]
 
 [project.scripts]

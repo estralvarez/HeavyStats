@@ -53,3 +53,5 @@ env/
 # Environment variables
 .env
 .env.*
+
+salidas/

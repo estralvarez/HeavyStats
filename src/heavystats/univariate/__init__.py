@@ -3,6 +3,9 @@ from heavystats.univariate.plots import (
     BasePlots,
     UnivariatePlots,
     desglosar_multirrespuesta,
+    obtener_mascara_percentiles,
+    get_percentile_mask,
+    mascara_percentiles,
 )
 from heavystats.univariate.constants import (
     DEFAULT_LABELS_MAP,
@@ -18,6 +21,9 @@ __all__ = [
     "UnivariateTableReport",
     "UnivariatePlots",
     "desglosar_multirrespuesta",
+    "obtener_mascara_percentiles",
+    "get_percentile_mask",
+    "mascara_percentiles",
     "DEFAULT_LABELS_MAP",
     "DEFAULT_CUSTOM_PARAMS",
     "DEFAULT_PERMISSIBLE_LIMITS",

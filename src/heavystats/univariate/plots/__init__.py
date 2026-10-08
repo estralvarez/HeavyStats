@@ -5,7 +5,12 @@ y figuras compuestas/mosaicos de determinantes de exposición toxicológica.
 """
 
 from heavystats.univariate.plots.base import BasePlots
-from heavystats.univariate.plots.distribucion import DistribucionPlotsMixin
+from heavystats.univariate.plots.distribucion import (
+    DistribucionPlotsMixin,
+    obtener_mascara_percentiles,
+    get_percentile_mask,
+    mascara_percentiles,
+)
 from heavystats.univariate.plots.categorico import CategoricoPlotsMixin, desglosar_multirrespuesta
 from heavystats.univariate.plots.exposicion import ExposicionPlotsMixin
 
@@ -28,6 +33,9 @@ class UnivariatePlots(BasePlots, DistribucionPlotsMixin, CategoricoPlotsMixin, E
     # Pipelines y funciones simplificadas en español
     plot_distribucion = DistribucionPlotsMixin.plot_distribucion
     distribucion = DistribucionPlotsMixin.plot_distribucion
+    obtener_mascara_percentiles = DistribucionPlotsMixin.obtener_mascara_percentiles
+    get_percentile_mask = DistribucionPlotsMixin.obtener_mascara_percentiles
+    mascara_percentiles = DistribucionPlotsMixin.obtener_mascara_percentiles
 
     plot_histograma = DistribucionPlotsMixin.plot_histograma
     histograma = DistribucionPlotsMixin.plot_histograma
@@ -57,5 +65,8 @@ __all__ = [
     "BasePlots",
     "UnivariatePlots",
     "desglosar_multirrespuesta",
+    "obtener_mascara_percentiles",
+    "get_percentile_mask",
+    "mascara_percentiles",
 ]
 
