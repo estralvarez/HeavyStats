@@ -366,7 +366,7 @@ Si utilizas `heavystats` en tus investigaciones científicas, tesis de grado o p
   author = {Estrada Alvarez, Jose Daniel},
   title = {HeavyStats: Framework bioestadístico y quimiométrico para el biomonitoreo de metales pesados en salud infantil},
   year = {2026},
-  version = {0.5.0},
+  version = {0.5.0a},
   url = {https://github.com/estralvarez/HeavyStats}
 }
 ```

@@ -3,7 +3,7 @@ import heavystats as hs
 
 
 def test_package_version():
-    assert hs.__version__ == "0.5.0"
+    assert hs.__version__ == "0.5.0a"
 
 
 def test_package_exports():
