@@ -8,14 +8,14 @@ from typing import Dict, List, Optional, Any, Union, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from heavystats.bivariate.tests import (
+from heavystats.bivariante.tests import (
     mann_whitney_test,
     kruskal_wallis_test,
     spearman_correlation,
     kendall_correlation,
     adjust_pvalues,
 )
-from heavystats.bivariate.constants import (
+from heavystats.bivariante.constants import (
     DEFAULT_BIVARIATE_GROUPS,
     DEFAULT_LABELS_MAP,
     get_label,

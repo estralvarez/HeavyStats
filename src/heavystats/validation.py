@@ -26,14 +26,6 @@ class ValidationReport(BaseReport):
             })
         return pd.DataFrame(rows)
 
-    def to_csv(self, filepath: str, **kwargs: Any) -> None:
-        """Exporta el reporte de validación a un archivo CSV."""
-        dir_path = os.path.dirname(filepath)
-        if dir_path:
-            os.makedirs(dir_path, exist_ok=True)
-        kwargs.setdefault("encoding", "utf-8")
-        self.to_dataframe().to_csv(filepath, index=kwargs.get("index", False), **kwargs)
-
     def to_excel(self, filepath: str, sheet_name: str = "Control_Calidad", **kwargs: Any) -> None:
         """Exporta el reporte de validación a un archivo Excel (.xlsx)."""
         dir_path = os.path.dirname(filepath)

@@ -15,6 +15,8 @@ from heavystats.studio.templates import (
     generar_cuaderno_univariante_graficos,
     generar_cuaderno_bivariante_tablas,
     generar_cuaderno_bivariante_graficos,
+    generar_cuaderno_multivariante_pls,
+    generar_cuaderno_atipicos_diagnostico,
 )
 
 
@@ -41,7 +43,7 @@ def ejecutar_pipeline(cfg, progress_callback=None, force=False):
     # Si las carpetas y cuadernos ya existen, omitir re-ejecución innecesaria
     if not force and verificar_proyecto_existente(cfg):
         if progress_callback:
-            progress_callback(8, 8, f"Las carpetas de {cfg['nombre']} ya están creadas. Omitiendo re-ejecución.")
+            progress_callback(9, 9, f"Las carpetas de {cfg['nombre']} ya están creadas. Omitiendo re-ejecución.")
         return {
             "metal": cfg,
             "directorios": [],
@@ -51,12 +53,13 @@ def ejecutar_pipeline(cfg, progress_callback=None, force=False):
                 "filtros.ipynb",
                 "univariante/01_tablas.ipynb",
                 "univariante/02_graficos.ipynb",
-                "bivariante/01_analisis_estadistico.ipynb",
                 "bivariante/02_graficos_bivariantes.ipynb",
+                "multivariante/01_analisis_multivariante_pls.ipynb",
+                "multivariante/02_analisis_outliers_diagnostico.ipynb",
             ],
             "ya_existia": True,
         }
-    pasos_totales = 8
+    pasos_totales = 9
     paso = 0
 
     def notificar(mensaje):
@@ -102,9 +105,19 @@ def ejecutar_pipeline(cfg, progress_callback=None, force=False):
     nb_b2 = generar_cuaderno_bivariante_graficos(cfg)
     cuadernos_generados.append(nb_b2)
 
+    # 8. Multivariante PLS-1 / VIP
+    notificar(f"Construyendo multivariante/01_analisis_multivariante_pls.ipynb ({cfg['nombre']})...")
+    nb_multi = generar_cuaderno_multivariante_pls(cfg)
+    cuadernos_generados.append(nb_multi)
+
+    # 9. Diagnóstico de valores atípicos y quimiometría
+    notificar(f"Construyendo multivariante/02_analisis_outliers_diagnostico.ipynb ({cfg['nombre']})...")
+    nb_out = generar_cuaderno_atipicos_diagnostico(cfg)
+    cuadernos_generados.append(nb_out)
+
     return {
         "metal": cfg,
         "directorios": dirs_creados,
         "dataset_audit": audit_data,
-        "cuadernos": [str(c) for c in cuadernos_generados],
+        "cuadernos": [str(c) for c in cuadernos_generados if c is not None],
     }

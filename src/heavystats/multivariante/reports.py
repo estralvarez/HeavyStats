@@ -1,10 +1,12 @@
 """
 Generadores de reportes editoriales y exportación para el análisis multivariante:
-- MultivariateTableReport: Reporte interactivo en HTML (calidad de publicación) y generador de tablas en LaTeX (booktabs).
+- MultivariateTableReport: Reporte consolidado en HTML, CSV y JSON (FDR, LASSO, PLS-R).
+- PlsVipReport: Reporte especializado en puntajes VIP de PLS-R con dominios y clasificación.
 """
 
 from typing import Dict, List, Optional, Any, Union
 import os
+from pathlib import Path
 import pandas as pd
 import numpy as np
 
@@ -14,15 +16,20 @@ from heavystats.html_utils import (
     wrap_html_container,
     format_html_str,
 )
+# Re-exportar reportes de atípicos desde el módulo canónico heavystats.atipicos
+from heavystats.atipicos import (
+    UnivariateOutlierReport,
+    OutlierDiagnosticReport,
+    StratifiedContrastReport,
+)
 
 
 class MultivariateTableReport(BaseReport):
     """
     Reporte consolidado del análisis multivariante.
-    
     Integra los resultados del Tamizaje Bivariante No Paramétrico, la Regresión LASSO
     y la Regresión por Mínimos Cuadrados Parciales (PLS-R) en una sola estructura analítica
-    exportable a LaTeX (normativa FACYT / booktabs), HTML de publicación y Excel.
+    exportable a HTML (interactivo editorial), CSV y JSON estructurado.
     """
 
     def __init__(
@@ -45,12 +52,12 @@ class MultivariateTableReport(BaseReport):
         self.target_name = target_name
         self.log_transformed = log_transformed
         self.title = title
-        self.subtitle = subtitle or f"Evaluación de determinantes biológicos sobre la concentración sérica de {target_name}"
+        self.subtitle = subtitle or f"Evaluación de covariables de exposición frente a {target_name}"
         self.notes = notes if notes is not None else [
             f"Variable dependiente biológica modelada: {'ln(' + target_name + ')' if log_transformed else target_name}.",
-            "Cribado bivariante ejecutado mediante contrastes no paramétricos de distribución libre (Mann-Whitney U, Kruskal-Wallis, Spearman) con control de tasa de falso descubrimiento (q-FDR Benjamini-Hochberg).",
-            "Regresión LASSO optimizada mediante validación cruzada (k-fold CV) con penalización L1.",
-            "Regresión PLS-R basada en componentes latentes ortogonales; factores con VIP ≥ 1.0 se declaran determinantes críticos de la carga xenobiótica.",
+            "Cribado bivariante ejecutado mediante contrastes no paramétricos de distribución libre con control de tasa de falso descubrimiento (q-FDR Benjamini-Hochberg).",
+            "Regresión LASSO optimizada mediante validación cruzada con penalización L1.",
+            "Regresión PLS-R basada en componentes latentes ortogonales; factores con VIP ≥ 1.0 se declaran determinantes críticos.",
             "Dirección del efecto: Aporte (↑, incremento de la concentración) o Atenuación (↓, efecto protector o de reducción)."
         ]
 
@@ -64,113 +71,6 @@ class MultivariateTableReport(BaseReport):
 
     def to_dataframe(self) -> pd.DataFrame:
         return self.df
-
-    def to_latex(
-        self,
-        filepath: Optional[str] = None,
-        caption: Optional[str] = None,
-        label: str = "tab:multivariante_factores",
-        spanish_comma: bool = True
-    ) -> str:
-        """
-        Genera el código LaTeX de la tabla con el paquete booktabs siguiendo rigurosamente
-        el estándar editorial de FACYT (sin líneas verticales, encabezados spanner y tipografía matemática).
-        """
-        cap = caption or (
-            f"Tamizaje bivariante no paramétrico y parámetros de los modelos multivariantes "
-            f"(LASSO y PLS-R) para la concentración sérica de \\ce{{Hg_T}}."
-        )
-
-        def fmt_num(v: Any, dec: int = 3, sign: bool = False) -> str:
-            if v is None or pd.isna(v) or v == "---":
-                return "---"
-            try:
-                val = float(v)
-                s = f"{val:+.{dec}f}" if sign else f"{val:.{dec}f}"
-                if spanish_comma:
-                    s = s.replace(".", "{,}")
-                return s
-            except Exception:
-                return str(v)
-
-        lines: List[str] = []
-        lines.append("\\begin{table}[htbp]")
-        lines.append("    \\centering")
-        lines.append("    \\small")
-        lines.append(f"    \\caption{{{cap}}}")
-        lines.append(f"    \\label{{{label}}}")
-        lines.append("    \\begin{tabular}{lcccccc}")
-        lines.append("        \\toprule")
-        lines.append("        & \\multicolumn{2}{c}{\\textbf{Cribado Bivariante}} & \\multicolumn{2}{c}{\\textbf{Regresión LASSO}} & \\multicolumn{2}{c}{\\textbf{Regresión PLS-R}} \\\\")
-        lines.append("        \\cmidrule(lr){2-3} \\cmidrule(lr){4-5} \\cmidrule(lr){6-7}")
-        lines.append("        \\textbf{Determinante / Factor} & \\textbf{Estadístico} & \\textbf{Valor $p$} & $\\boldsymbol{\\beta}$ \\textbf{Estandarizado} & \\textbf{Efecto} & \\textbf{VIP} & \\textbf{Coef. PLS} \\\\")
-        lines.append("        \\midrule")
-
-        for _, row in self._df.iterrows():
-            factor_name = str(row.get("Etiqueta", row.get("Variable", "")))
-            stat_val = row.get("Estadístico")
-            stat_name = row.get("Estadístico_Nombre", "")
-
-            # Formatear el estadístico de forma matemática y tipográfica
-            raw_stat = str(row.get("Estadístico_Str", "---"))
-            if "ρ" in raw_stat or "rho" in raw_stat:
-                val_num = fmt_num(stat_val, dec=3, sign=True)
-                stat_tex = f"$\\rho_s = {val_num}$"
-            elif raw_stat.startswith("U = "):
-                val_num = fmt_num(stat_val, dec=1, sign=False)
-                stat_tex = f"$U = {val_num}$"
-            elif raw_stat.startswith("H = "):
-                val_num = fmt_num(stat_val, dec=2, sign=False)
-                stat_tex = f"$H = {val_num}$"
-            else:
-                stat_tex = raw_stat
-
-            p_val = fmt_num(row.get("p_valor"), dec=3)
-            
-            beta_val = row.get("Beta_Estandarizado")
-            if beta_val is not None and abs(float(beta_val)) < 1e-5:
-                beta_lasso = "0{,}000" if spanish_comma else "0.000"
-            else:
-                beta_lasso = fmt_num(beta_val, dec=3, sign=True)
-
-            efecto_lasso = str(row.get("Efecto_Lasso", "---"))
-            efecto_lasso = efecto_lasso.replace(" (↑)", "").replace(" (↓)", "").replace(" (β = 0)", "")
-
-            vip_val = fmt_num(row.get("VIP"), dec=2)
-            pls_coef = fmt_num(row.get("Coef_PLS"), dec=3, sign=True)
-
-            line_str = f"        {factor_name:<36} & {stat_tex:<14} & {p_val:<8} & {beta_lasso:<10} & {efecto_lasso:<12} & {vip_val:<8} & {pls_coef} \\\\"
-            lines.append(line_str)
-
-        lines.append("        \\bottomrule")
-        lines.append("    \\end{tabular}")
-        lines.append("    \\vspace{1.5mm}")
-        
-        target_clean = self.target_name.lower()
-        if "mercurio" in target_clean or "hg" in target_clean:
-            chem_target = "\\ce{Hg_T}"
-        elif "plomo" in target_clean or "pb" in target_clean:
-            chem_target = "\\ce{Pb}"
-        elif "cadmio" in target_clean or "cd" in target_clean:
-            chem_target = "\\ce{Cd}"
-        else:
-            chem_target = f"\\text{{{self.target_name}}}"
-
-        target_tex = f"\\ln({chem_target})" if self.log_transformed else chem_target
-        lines.append(f"    \\flushleft{{\\footnotesize \\textit{{Nota:}} Variable dependiente modelada: ${target_tex}$. "
-                     "$\\beta$ de LASSO optimizado mediante validación cruzada ($k$-fold CV). "
-                     "Factores con $\\text{VIP} \\ge 1{,}0$ se consideran determinantes altamente influyentes en el espacio latente de PLS-R. "
-                     "Efecto: \\textit{Aporte} ($\\beta > 0$, incremento biológico) o \\textit{Atenuación} ($\\beta < 0$, reducción o factor protector).}")
-        lines.append("\\end{table}")
-
-        latex_code = "\n".join(lines)
-
-        if filepath:
-            os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(latex_code)
-
-        return latex_code
 
     def to_html(self, filepath: Optional[str] = None, full_page: bool = False) -> str:
         """Genera el código HTML con calidad de publicación del reporte."""
@@ -207,7 +107,7 @@ class MultivariateTableReport(BaseReport):
             "Efecto LASSO": "c",
             "VIP PLS-R": "r",
             "Coef. PLS": "r",
-            "Prioridad": "c"
+            "Prioridad": "c",
         }
 
         html_code = render_html_table(
@@ -215,19 +115,230 @@ class MultivariateTableReport(BaseReport):
             title=self.title,
             subtitle=self.subtitle,
             notes=self.notes,
-            spanners=spanners,
             column_alignments=alignments,
+            spanners=spanners,
             full_page=full_page
         )
 
         if filepath:
-            os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(html_code)
+            self._write_file(filepath, html_code)
 
         return html_code
 
-    def _repr_html_(self) -> str:
-        """Renderizado HTML interactivo para Jupyter notebooks."""
-        return self.to_html(full_page=False)
 
+DEFAULT_SURVEY_LABELS: Dict[str, str] = {
+    "Alim_Pescados": "Consumo de Pescado / Atún",
+    "Alim_Cereales": "Consumo de Cereales",
+    "Alim_Leguminosas": "Consumo de Leguminosas",
+    "Alim_Tuberculos": "Consumo de Tubérculos",
+    "Alim_Carnes": "Consumo de Carnes",
+    "Alim_Bebidas": "Consumo de Bebidas",
+    "Alim_Huevos": "Consumo de Huevos",
+    "Alim_Lacteos": "Consumo de Lácteos",
+    "Alim_Frutas": "Consumo de Frutas",
+    "Alim_Vegetales": "Consumo de Vegetales",
+    "Alim_Azucar": "Consumo de Azúcar",
+    "Alim_Grasas": "Consumo de Grasas",
+    "Alim_Chocolate": "Consumo de Chocolate",
+    "Salud_Fuma": "Exposición a Humo (Tabaco)",
+    "Salud_Actividad": "Actividad Física Regular",
+    "Salud_Bombillos": "Manipulación Bombillos Fluor.",
+    "Salud_Joyeria": "Uso de Joyería / Bisutería",
+    "Salud_Transporte_caminar": "Movilidad Peatonal (Caminar)",
+    "Salud_Transporte_publico": "Transporte Público",
+    "Salud_Transporte_vehiculo": "Vehículo Particular",
+    "Salud_Agua_pozo_profundo": "Agua de Pozo Profundo",
+    "Salud_Agua_filtrada": "Agua Filtrada",
+    "Salud_Agua_mineral_embotellada": "Agua Mineral Embotellada",
+    "Exposicion_Talleres_latoneria": "Taller de Latonería",
+    "Exposicion_Talleres_mecanico": "Taller Mecánico",
+    "Exposicion_Lugares_canales": "Cercanía a Canales",
+    "Exposicion_Lugares_estacion_gasolina": "Estación de Gasolina",
+    "Exposicion_Lugares_rectificadora_motores": "Rectificadora de Motores",
+    "Exposicion_Lugares_rios": "Cercanía a Ríos",
+    "Exposicion_Industrias_fabrica_metales": "Fábrica Metalmecánica",
+    "Exposicion_Industrias_fabrica_productos_quimicos": "Industria Química",
+    "Edad": "Edad (Años)",
+    "Sexo": "Sexo",
+    "IMC": "Índice de Masa Corporal (IMC)"
+}
+
+
+class PlsVipReport(BaseReport):
+    """
+    Reporte editorial de Importancia de Variables en la Proyección (VIP) y Coeficientes PLS-1.
+    Diseñado para presentación interactiva en Jupyter Notebooks, exportación a HTML, CSV y JSON,
+    con etiquetas descriptivas en español científico y clasificación de relevancia.
+    """
+
+    def __init__(
+        self,
+        df_vip: Optional[Union[pd.DataFrame, Any]] = None,
+        pls_model: Optional[Any] = None,
+        nipals_summary_df: Optional[pd.DataFrame] = None,
+        r2_global: float = 0.0,
+        rmse: float = 0.0,
+        labels_map: Optional[Dict[str, str]] = None,
+        target_name: Optional[str] = None,
+        title: str = "Ranking de Importancia en la Proyección (VIP) y Parámetros PLS-1",
+        subtitle: Optional[str] = None,
+        filepath_html: Optional[str] = None,
+        filepath_csv: Optional[str] = None,
+        filepath_json: Optional[str] = None,
+        filepath_tex: Optional[str] = None,
+        **kwargs: Any,
+    ):
+        self.target_name = target_name or "Mercurio_ug_L"
+
+        if pls_model is not None and hasattr(pls_model, "summary_df"):
+            base_df = pls_model.summary_df.copy()
+            if hasattr(pls_model, "r2_"):
+                r2_global = float(pls_model.r2_)
+        elif df_vip is not None and isinstance(df_vip, pd.DataFrame):
+            base_df = df_vip.copy()
+        elif nipals_summary_df is not None:
+            base_df = nipals_summary_df.copy()
+        else:
+            base_df = pd.DataFrame(columns=["Variable", "VIP", "Beta_PLS", "Coef_PLS"])
+
+        self._df = base_df.copy()
+
+        # Coeficiente Beta PLS
+        if "Beta_PLS" not in self._df.columns:
+            if "Coef_PLS" in self._df.columns:
+                self._df["Beta_PLS"] = self._df["Coef_PLS"]
+            elif "Beta" in self._df.columns:
+                self._df["Beta_PLS"] = self._df["Beta"]
+            else:
+                self._df["Beta_PLS"] = 0.0
+
+        # Mapeo de etiquetas
+        mapper = DEFAULT_SURVEY_LABELS.copy()
+        if labels_map:
+            mapper.update(labels_map)
+
+        if "Etiqueta" not in self._df.columns and "Variable" in self._df.columns:
+            self._df["Etiqueta"] = self._df["Variable"].map(mapper).fillna(self._df["Variable"])
+
+        # Asignación de dominios
+        if "Dominio" not in self._df.columns and "Variable" in self._df.columns:
+            def _get_dom(v: str) -> str:
+                s = str(v).lower()
+                if s.startswith("alim_") or "dieta" in s or "pescado" in s or "atun" in s:
+                    return "Hábitos Dietarios"
+                elif s.startswith("salud_transporte") or "movilidad" in s:
+                    return "Movilidad Urbana"
+                elif s.startswith("salud_agua") or "agua" in s:
+                    return "Fuentes Hídricas"
+                elif s.startswith("salud_") or "fuma" in s:
+                    return "Hogar y Estilo de Vida"
+                elif s.startswith("exposicion_") or "taller" in s or "industria" in s:
+                    return "Exposición Ambiental / Ocupacional"
+                elif s in ("edad", "sexo", "imc"):
+                    return "Sociodemográfico / Biometría"
+                return "Otros Factores"
+            self._df["Dominio"] = self._df["Variable"].apply(_get_dom)
+
+        self.r2_global = float(r2_global)
+        self.rmse = float(rmse)
+        self.title = title
+        self.subtitle = subtitle or f"Modelo PLS-1 evaluado (R² = {self.r2_global:.3f})"
+
+        self.n_criticas = int((self._df["VIP"] >= 1.0).sum()) if "VIP" in self._df.columns else 0
+        self.n_moderadas = int(((self._df["VIP"] >= 0.8) & (self._df["VIP"] < 1.0)).sum()) if "VIP" in self._df.columns else 0
+        self.n_marginales = int((self._df["VIP"] < 0.8).sum()) if "VIP" in self._df.columns else 0
+
+        top_row = self._df.iloc[0] if len(self._df) > 0 else None
+        self.top_var = str(top_row.get("Etiqueta", top_row.get("Variable", "---"))) if top_row is not None else "---"
+        self.top_vip = float(top_row["VIP"]) if top_row is not None and "VIP" in top_row else 0.0
+
+        if filepath_html:
+            self.to_html(filepath_html)
+        if filepath_csv:
+            self.to_csv(filepath_csv)
+        if filepath_json:
+            self.to_json(filepath_json)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        return self._df.copy()
+
+    def to_dataframe(self) -> pd.DataFrame:
+        return self.df
+
+    def to_html(self, filepath: Optional[str] = None, full_page: bool = False, top_n: Optional[int] = None) -> str:
+        """
+        Genera reporte interactivo HTML con tarjetas KPI, callouts y formato tipográfico editorial.
+        """
+        kpi_html = f"""
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px;">
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; border-left: 4px solid #0284c7;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Bondad de Ajuste R²</div>
+            <div style="font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 4px;">{self.r2_global * 100:.2f}%</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Varianza explicada PLS-1</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; border-left: 4px solid #dc2626;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Determinantes Críticos</div>
+            <div style="font-size: 20px; font-weight: 700; color: #dc2626; margin-top: 4px;">{self.n_criticas} variables</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">VIP ≥ 1.0 (Impacto prioritario)</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; border-left: 4px solid #d97706;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Influencia Moderada</div>
+            <div style="font-size: 20px; font-weight: 700; color: #d97706; margin-top: 4px;">{self.n_moderadas} variables</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">0.8 ≤ VIP &lt; 1.0</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; border-left: 4px solid #16a34a;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Factor Dominante</div>
+            <div style="font-size: 15px; font-weight: 700; color: #0f172a; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{self.top_var}">{self.top_var}</div>
+            <div style="font-size: 11px; color: #16a34a; margin-top: 2px; font-weight: 600;">VIP Máximo = {self.top_vip:.3f}</div>
+          </div>
+        </div>
+        """
+
+        df_display = self._df.head(top_n).copy() if top_n is not None else self._df.copy()
+
+        # Generar badges de clasificación
+        def make_badge(v: float) -> str:
+            if v >= 1.0:
+                return "<span style='background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700;'>Crítica (VIP ≥ 1.0)</span>"
+            elif v >= 0.8:
+                return "<span style='background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600;'>Moderada</span>"
+            else:
+                return "<span style='background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:11px;'>Marginal</span>"
+
+        def make_effect(b: float) -> str:
+            if b > 0:
+                return f"<span style='color:#b91c1c; font-weight:600;'>+{b:.3f} (Aporte ↑)</span>"
+            else:
+                return f"<span style='color:#15803d; font-weight:600;'>{b:.3f} (Atenuación ↓)</span>"
+
+        df_table = pd.DataFrame()
+        df_table["Determinante"] = df_display["Etiqueta"]
+        df_table["Dominio"] = df_display["Dominio"]
+        df_table["Puntaje VIP"] = df_display["VIP"].apply(lambda x: f"{float(x):.3f}")
+        df_table["Efecto (β PLS)"] = df_display["Beta_PLS"].apply(make_effect)
+        df_table["Clasificación"] = df_display["VIP"].apply(make_badge)
+
+        table_html = render_html_table(
+            df=df_table,
+            column_alignments={"Determinante": "l", "Dominio": "l", "Puntaje VIP": "r", "Efecto (β PLS)": "c", "Clasificación": "c"},
+            full_page=False
+        )
+
+        inner = kpi_html + table_html
+        wrapped = wrap_html_container(
+            inner_html=inner,
+            title=self.title,
+            subtitle=self.subtitle,
+            notes=[
+                "Predictores directos de la encuesta estandarizados por auto-escalado (Z-score).",
+                f"Determinantes con VIP ≥ 1.0 representan factores de influencia primaria sobre la carga biológica.",
+                f"El factor de mayor aporte es {self.top_var} con VIP = {self.top_vip:.3f}."
+            ],
+            full_page=full_page
+        )
+
+        if filepath:
+            self._write_file(filepath, wrapped)
+
+        return wrapped

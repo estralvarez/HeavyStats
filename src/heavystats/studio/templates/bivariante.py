@@ -1,6 +1,6 @@
 """
 Plantillas para los cuadernos de Análisis Bivariante (Estadística y Gráficos).
-Diseñado con calidad de publicación editorial a 300 DPI y alineado con heavystats.bivariate.
+Diseñado con calidad de publicación editorial a 300 DPI y alineado con heavystats.bivariante.
 """
 
 from heavystats.studio.notebook_builder import crear_cuaderno
@@ -16,7 +16,7 @@ def generar_cuaderno_bivariante_tablas(cfg):
 def generar_cuaderno_bivariante_graficos(cfg):
     """
     Construye bivariante/02_graficos_bivariantes.ipynb para el metal seleccionado,
-    alineado con la estructura analítica y las funciones del paquete heavystats.bivariate.
+    alineado con la estructura analítica y las funciones del paquete heavystats.bivariante.
     """
     nombre = cfg["nombre"]
     simbolo = cfg["simbolo"]
@@ -27,11 +27,13 @@ def generar_cuaderno_bivariante_graficos(cfg):
     col_dieta = cfg["col_dieta_prioritaria"]
     nombre_dieta = cfg["nombre_dieta"]
 
+    tipo_analisis = cfg.get("tipo_analisis", "parametrico" if key in ["mercurio", "plomo"] else "no_parametrico")
+
     celdas = [
         {
             "tipo": "markdown",
             "contenido": f"""# Análisis Bivariante: Visualización Epidemiológica y Toxicológica de Asociaciones ({nombre} - {simbolo})
-### Paquete Bioestadístico HeavyStats (`heavystats.bivariate`)
+### Paquete Bioestadístico HeavyStats (`heavystats.bivariante`)
 
 Motor gráfico editorial a 300 DPI estructurado según los principios del análisis bivariante bioestadístico:
 1. **Variable Cuantitativa vs. Variable Cualitativa**:
@@ -44,17 +46,13 @@ Motor gráfico editorial a 300 DPI estructurado según los principios del análi
 3. **Variable Cuantitativa vs. Variable Cuantitativa**:
    - Dispersión continua, correlación de Spearman $\\rho_s$ con intervalos de confianza al 95% calculados por **Bootstrap (2,000 réplicas)**, Kendall $\\tau_b$ y regresión lineal OLS / Pearson $r$ ($R^2$).
    - Matrices de co-exposición bivariante: Heatmap triangular inferior estilizado y matriz de dispersión compacta con distribuciones KDE univariantes.
-4. **Mosaico Bivariante Integrado y Funciones a Nivel de Módulo**:
-   - Cuadrícula multipanel consolidada (`plot_grid`) y funciones de acceso directo funcional (`compare_groups_plot`, etc.).
+4. **Funciones de Conveniencia a Nivel de Módulo**:
+   - Funciones de acceso directo funcional (`compare_groups_plot`, etc.).
 5. **Análisis de Similitud Dietaria y Contrastes de Subcohorte de Alta Carga Corporal**:
    - Ranking de correlación / distancia frente a la concentración plasmática (`similarity_ranking_plot`).
    - Contraste modal vs resto de la muestra (`subcohort_contrast_plot`) con opciones paramétricas y no paramétricas.
    - Tamizaje sistemático automatizado de contrastes significativos (`scan_subcohort_contrasts`).
-   - Consenso de factores comunes de riesgo (`shared_factors_plot`) y mosaico editorial de subcohorte (`subcohort_mosaic_plot`).
-6. **Radiografía Epidemiológica de la Encuesta y Matriz de Síntesis Normalizada**:
-   - Mapas de calor temáticos por bloque con columnas normalizadas $[0.0 - 1.0]$ (`survey_block_heatmap`).
-   - Suite completa automatizada de los 7 bloques temáticos a 300 DPI (`plot_survey_radiography`).
-   - Matriz de síntesis ejecutiva de exposición multidominio clasificada por carga biológica (`plot_survey_synthesis`)."""
+   - Consenso de factores comunes de riesgo (`shared_factors_plot`) y mosaico editorial de subcohorte (`subcohort_mosaic_plot`)."""
         },
         {
             "tipo": "markdown",
@@ -77,7 +75,7 @@ if heavystats_src.exists() and str(heavystats_src) not in sys.path:
     sys.path.insert(0, str(heavystats_src))
 
 import heavystats as hs
-from heavystats.bivariate import (
+from heavystats.bivariante import (
     BivariatePlots,
     compare_groups_plot,
     correlation_analysis_plot,
@@ -88,11 +86,12 @@ from heavystats.bivariate import (
     subcohort_contrast_plot,
     shared_factors_plot,
     subcohort_mosaic_plot,
-    survey_block_heatmap_plot,
-    survey_radiography_plot,
-    survey_synthesis_plot,
     scan_subcohort_contrasts,
 )
+
+# Definición del tipo de análisis inferencial para {nombre}
+tipo_analisis = "{tipo_analisis}"  # 'parametrico' para Hg/Pb, 'no_parametrico' para Cd
+col_metal = "{col_conc}"
 
 # Definición de rutas base y directorios de salida
 base_dir = Path.cwd() if (Path.cwd() / "datos").exists() else Path.cwd().parent
@@ -123,6 +122,7 @@ salidas_graficos = base_dir / "salidas" / "bivariante" / "graficos"
 salidas_graficos.mkdir(parents=True, exist_ok=True)
 
 print(f"Motor BivariatePlots inicializado exitosamente (N={{len(df_analytical)}} observaciones, {{len(df_analytical.columns)}} variables).")
+print(f"Método analítico configurado: {{tipo_analisis.upper()}} para {{col_metal}}")
 print(f"Directorio de figuras configurado en: {{salidas_graficos}}")"""
         },
         {
@@ -264,17 +264,6 @@ fig_radar.savefig(salidas_graficos / "radar_dietario_{key}_split.pdf", dpi=300, 
 plt.show()"""
         },
         {
-            "tipo": "code",
-            "contenido": f"""# 2.5 Validación Empírica del Algoritmo de Riesgo frente a Concentraciones Biológicas
-fig_risk, axes_risk = bp.plot_risk_algorithm(
-    metals=["{col_conc}"],
-    figsize=(6.5, 4.5),
-    filepath=str(salidas_graficos / "validacion_algoritmo_riesgo_{key}.png")
-)
-fig_risk.savefig(salidas_graficos / "validacion_algoritmo_riesgo_{key}.pdf", dpi=300, bbox_inches="tight")
-plt.show()"""
-        },
-        {
             "tipo": "markdown",
             "contenido": f"""---
 ## 4. Variable Cuantitativa vs. Variable Cuantitativa (Gradientes Continuos y Co-Exposición)
@@ -346,29 +335,13 @@ plt.show()"""
         {
             "tipo": "markdown",
             "contenido": """---
-## 5. Mosaico Bivariante Integrado y Funciones a Nivel de Módulo
+## 5. Funciones de Conveniencia a Nivel de Módulo
 
-- **Cuadrícula Exploratoria Multideterminante (`plot_grid`)**: Agrupa en un único lienzo factores binarios, politómicos, continuos y ordinales.
 - **Funciones de Conveniencia a Nivel de Módulo**: Acceso funcional directo sin necesidad de instanciar `BivariatePlots` (ideal para scripts analíticos y pipelines automatizados)."""
         },
         {
             "tipo": "code",
-            "contenido": f"""# 4.1 Mosaico Bivariante Integrado: Factores Sociodemográficos, Clínicos y Ambientales
-fig_grid, axes_grid = bp.plot_grid(
-    metal="{col_conc}",
-    binary_cols=["Sexo", "Es_Expuesto"],
-    categorical_cols=["Institucion", "Sector"],
-    continuous_cols=["Edad", "Score_Riesgo"],
-    ordinal_cols=["{col_dieta}"],
-    ncols=2,
-    filepath=str(salidas_graficos / "mosaico_editorial_bivariante_{key}.png")
-)
-fig_grid.savefig(salidas_graficos / "mosaico_editorial_bivariante_{key}.pdf", dpi=300, bbox_inches="tight")
-plt.show()"""
-        },
-        {
-            "tipo": "code",
-            "contenido": f"""# 4.2 Uso de Funciones Funcionales Directas del Módulo (API Funcional sin Instanciación)
+            "contenido": f"""# 4.1 Uso de Funciones Funcionales Directas del Módulo (API Funcional sin Instanciación)
 fig_fn_comp, ax_fn_comp = compare_groups_plot(
     df=df_analytical,
     quantitative="{col_conc}",
@@ -401,7 +374,7 @@ plt.show()"""
             "contenido": f"""# 5.1 Ranking de Similitud Dietaria frente a la Concentración Sérica de {nombre}
 fig_sim, ax_sim, df_sim = bp.similarity_ranking_plot(
     target_metal="{col_conc}",
-    method="nonparametric",
+    method=tipo_analisis,
     title="Ranking de Asociación Dietaria vs Concentración de {nombre}",
     filepath=str(salidas_graficos / "ranking_similitud_{key}.png")
 )
@@ -415,7 +388,7 @@ fig_contrast, ax_contrast, res_contrast = bp.subcohort_contrast_plot(
     target_metal="{col_conc}",
     criterion_col="{col_dieta}",
     criterion_val=None,  # Selecciona automáticamente la categoría modal de mayor frecuencia
-    method="nonparametric",  # Admite "nonparametric" o "parametric"
+    method=tipo_analisis,  # Admite 'parametrico' o 'no_parametrico'
     annotate_ids=False,
     title="Contraste de Carga Corporal: {nombre} ({nombre_dieta} Modal vs Resto)",
     filepath=str(salidas_graficos / "contraste_subcohorte_{key}_{col_dieta}.png")
@@ -428,7 +401,7 @@ plt.show()"""
             "contenido": f"""# 5.3 Tamizaje Sistemático de Contrastes Dietarios Significativos (p < 0.05)
 df_scan = bp.scan_subcohort_contrasts(
     target_metal="{col_conc}",
-    method="nonparametric",
+    method=tipo_analisis,
     alpha=0.05,
     plot_significant=False,
 )
@@ -454,53 +427,31 @@ fig_sub_mosaic, axes_sub_mosaic, res_sub_mosaic = bp.subcohort_mosaic_plot(
     filepath=str(salidas_graficos / "mosaico_subcohorte_editorial_{key}.png")
 )
 fig_sub_mosaic.savefig(salidas_graficos / "mosaico_subcohorte_editorial_{key}.pdf", dpi=300, bbox_inches="tight")
-plt.show()"""
+plt.show()
+
+print(f"\\n¡Todas las figuras bivariantes de {nombre} fueron generadas y exportadas con éxito en:\\n  -> {{salidas_graficos.resolve()}}")"""
         },
         {
             "tipo": "markdown",
-            "contenido": f"""---
-## 7. Radiografía Epidemiológica de la Encuesta y Matriz de Síntesis Normalizada ({nombre})
+            "contenido": """---
+## 7. Consolidación de Figuras en Documento PDF Único
 
-- **Mapas de Calor Normalizados (`survey_block_heatmap`)**: Columnas escaladas en $[0.0 - 1.0]$, columna totalizadora separada y corte visual por percentiles ($\\leq P_{{25}}$, $P_{{25}} - P_{{75}}$, $\\geq P_{{75}}$) según la concentración de {nombre}.
-- **Suite Completa de 7 Bloques (`plot_survey_radiography`)**: Generación masiva automatizada de los 7 paneles temáticos a 300 DPI (PNG y PDF).
-- **Matriz de Síntesis Ejecutiva (`plot_survey_synthesis`)**: Visualización consolidada de exposición total normalizada clasificada en orden ascendente de biomarcador plasmático."""
+Integramos todas las figuras bivariantes a 300 DPI en un documento PDF consolidado con portada institucional."""
         },
         {
             "tipo": "code",
-            "contenido": f"""# 6.1 Radiografía Temática: Bloque 4 de Hábitos Dietarios
-res_b4 = bp.plot_survey_radiography(
-    target_metal="{col_conc}",
-    blocks=["bloque4_dieta"],
-    output_dir=salidas_graficos,
-    show=True,
-    dpi=300
-)"""
-        },
-        {
-            "tipo": "code",
-            "contenido": f"""# 6.2 Generación Masiva Automatizada de la Suite de 7 Bloques de la Encuesta a 300 DPI
-suite_radiografia = bp.plot_survey_radiography(
-    target_metal="{col_conc}",
-    output_dir=salidas_graficos,
-    show=False,
-    dpi=300
-)
-print("Suite completa de radiografía generada exitosamente:")
-for bloq_k in suite_radiografia.keys():
-    print(f"  -> {{bloq_k}} exportado a {{salidas_graficos}} (PNG y PDF)")"""
-        },
-        {
-            "tipo": "code",
-            "contenido": f"""# 6.3 Matriz Ejecutiva de Síntesis Global: Exposición Multidominio clasificada por {nombre}
-fig_sintesis, ax_sintesis = bp.plot_survey_synthesis(
-    target_metal="{col_conc}",
-    output_dir=salidas_graficos,
-    show=True,
-    dpi=300
-)
-plt.show()
+            "contenido": f"""from heavystats.reporte_pdf import unir_pilar_pdf
 
-print(f"\\n¡Todas las figuras y radiografías bivariantes de {nombre} fueron generadas y exportadas con éxito en:\\n  -> {{salidas_graficos.resolve()}}")"""
+pdf_bivariante = unir_pilar_pdf(
+    pilar="bivariante",
+    ruta_pdf=base_dir / "salidas" / "bivariante" / "informe_bivariante_{key}.pdf",
+    directorio_salidas=base_dir / "salidas" / "bivariante",
+    titulo="PILAR BIVARIANTE: ASOCIACIONES Y CONTRASTES EPIDEMIOLÓGICOS ({nombre})",
+    subtitulo="Inferencia ({tipo_analisis.capitalize()}) y Perfil Dietario de {nombre}",
+    autor="Br. Jose Daniel Estrada Alvarez",
+    tutor="Dr. Jose Ramon Jimenez Ochoa"
+)
+print(f"[OK] Documento consolidado generado: {{pdf_bivariante}}")"""
         }
     ]
 

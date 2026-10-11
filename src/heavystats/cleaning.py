@@ -25,14 +25,32 @@ def load_data(csv_path: Optional[Any] = None) -> pd.DataFrame:
     if not CSV_PATH.exists():
         raise FileNotFoundError(f"No se pudo encontrar el archivo CSV en la ruta: {CSV_PATH.resolve()}")
     
-    # Cargar usando codificación UTF-8 (utf-8-sig elimina automáticamente el BOM) con fallback a latin1
+    # Cargar intentando formatos estándar (; con coma decimal, o , con punto decimal)
     try:
-        df = pd.read_csv(CSV_PATH, sep=";", decimal=',', encoding="utf-8-sig", dtype={"Muestra_Codificada": "Int64"})
-    except UnicodeDecodeError:
-        df = pd.read_csv(CSV_PATH, sep=";", decimal=',', encoding="latin1", dtype={"Muestra_Codificada": "Int64"})
+        df = pd.read_csv(CSV_PATH, sep=";", decimal=',', encoding="utf-8-sig")
+    except Exception:
+        try:
+            df = pd.read_csv(CSV_PATH, sep=",", decimal='.', encoding="utf-8-sig")
+        except Exception:
+            try:
+                df = pd.read_csv(CSV_PATH, sep=None, engine="python", decimal=',', encoding="utf-8-sig")
+            except Exception:
+                df = pd.read_csv(CSV_PATH, sep=None, engine="python", encoding="latin1")
+    
+    if "Muestra_Codificada" in df.columns:
+        df["Muestra_Codificada"] = pd.to_numeric(df["Muestra_Codificada"], errors="coerce").astype("Int64")
     
     # Sanitizar nombres de columnas por si persiste algún BOM invisible (\ufeff) o visible (ï»¿)
     df.columns = [str(c).lstrip("\ufeff").lstrip("ï»¿").strip() for c in df.columns]
+
+    # Convertir biomarcadores y variables biométricas a float si tienen coma decimal residual
+    numeric_targets = [
+        "Plomo_ug_dL", "Mercurio_ug_L", "Cadmio_ug_L",
+        "plomo", "mercurio", "cadmio", "Edad", "Peso_kg", "Altura_cm", "Score_Riesgo", "IMC"
+    ]
+    for col in numeric_targets:
+        if col in df.columns and not pd.api.types.is_numeric_dtype(df[col]):
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
     
     # Limpieza preventiva para archivos que hayan sido guardados previamente con el carácter de reemplazo (\ufffd)
     replacements = {
@@ -99,14 +117,6 @@ class VariableTypeReport(dict, BaseReport):
                     "Porcentaje Nulos (%)": round((n_nulls / self.shape[0] * 100), 2) if self.shape[0] > 0 else 0.0
                 })
         return pd.DataFrame(rows)
-
-    def to_csv(self, filepath: str, **kwargs: Any) -> None:
-        """Exporta los datos estructurados a un archivo CSV."""
-        dir_path = os.path.dirname(filepath)
-        if dir_path:
-            os.makedirs(dir_path, exist_ok=True)
-        kwargs.setdefault("encoding", "utf-8")
-        self.to_dataframe().to_csv(filepath, index=kwargs.get("index", False), **kwargs)
 
     def to_excel(self, filepath: str, sheet_name: str = "Tipos_Variables", **kwargs: Any) -> None:
         """Exporta los datos estructurados a un archivo Excel (.xlsx)."""
@@ -226,14 +236,6 @@ class VariablesTableReport(BaseReport):
     def to_dataframe(self) -> pd.DataFrame:
         """Devuelve la tabla como un pandas DataFrame."""
         return pd.DataFrame(self.rows)
-
-    def to_csv(self, filepath: str, **kwargs: Any) -> None:
-        """Exporta la clasificación a un archivo CSV."""
-        dir_path = os.path.dirname(filepath)
-        if dir_path:
-            os.makedirs(dir_path, exist_ok=True)
-        kwargs.setdefault("encoding", "utf-8")
-        self.to_dataframe().to_csv(filepath, index=kwargs.get("index", False), **kwargs)
 
     def to_excel(self, filepath: str, sheet_name: str = "Clasificacion_Variables", **kwargs: Any) -> None:
         """Exporta la clasificación a un libro de Excel (.xlsx)."""

@@ -14,6 +14,12 @@ DIR_SALIDAS_UNIVAR_TABLAS = DIR_SALIDAS / "univariante" / "tablas"
 DIR_SALIDAS_UNIVAR_GRAFICOS = DIR_SALIDAS / "univariante" / "graficos"
 DIR_SALIDAS_BIVAR_TABLAS = DIR_SALIDAS / "bivariante" / "tablas"
 DIR_SALIDAS_BIVAR_GRAFICOS = DIR_SALIDAS / "bivariante" / "graficos"
+DIR_SALIDAS_MULTIVAR = DIR_SALIDAS / "multivariante"
+DIR_SALIDAS_MULTIVAR_TABLAS = DIR_SALIDAS_MULTIVAR / "tablas"
+DIR_SALIDAS_MULTIVAR_GRAFICOS = DIR_SALIDAS_MULTIVAR / "graficos"
+DIR_SALIDAS_ATIPICOS = DIR_SALIDAS / "atipicos"
+DIR_SALIDAS_ATIPICOS_TABLAS = DIR_SALIDAS_ATIPICOS / "tablas"
+DIR_SALIDAS_ATIPICOS_GRAFICOS = DIR_SALIDAS_ATIPICOS / "graficos"
 
 METALES_CONFIG = {
     "plomo": {
@@ -25,6 +31,7 @@ METALES_CONFIG = {
         "col_riesgo": "Riesgo_Pb",
         "param_metal": "Plomo",
         "param_biv": "Plomo_ug_dL",
+        "tipo_analisis": "parametrico",
         "limite_permisible": 3.5,
         "entidad_referencia": "CDC (BLRV: 3.5 µg/dL)",
         "col_dieta_prioritaria": "Alim_Carnes",
@@ -43,6 +50,7 @@ METALES_CONFIG = {
         "col_riesgo": "Riesgo_Hg",
         "param_metal": "Mercurio",
         "param_biv": "Mercurio_ug_L",
+        "tipo_analisis": "parametrico",
         "limite_permisible": 5.0,
         "entidad_referencia": "EPA / OMS (5.0 µg/L)",
         "col_dieta_prioritaria": "Alim_Pescados",
@@ -61,6 +69,7 @@ METALES_CONFIG = {
         "col_riesgo": "Riesgo_Cd",
         "param_metal": "Cadmio",
         "param_biv": "Cadmio_ug_L",
+        "tipo_analisis": "no_parametrico",
         "limite_permisible": 1.0,
         "entidad_referencia": "OMS / ATSDR (1.0 µg/L)",
         "col_dieta_prioritaria": "Alim_Vegetales",

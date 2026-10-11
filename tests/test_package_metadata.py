@@ -3,7 +3,7 @@ import heavystats as hs
 
 
 def test_package_version():
-    assert hs.__version__ == "0.4.5"
+    assert hs.__version__ == "0.5.0"
 
 
 def test_package_exports():
@@ -20,7 +20,7 @@ def test_package_exports():
     assert hasattr(hs, "obtener_mascara_percentiles")
     assert hasattr(hs, "subcohort_contrast_plot")
     assert hasattr(hs, "contraste_subcohorte_plot")
-    assert hasattr(hs, "survey_radiography_plot")
+    assert hasattr(hs, "prepare_pls_dataframe")
     assert hasattr(hs, "scan_subcohort_contrasts")
     assert hasattr(hs, "mann_whitney_test")
     assert hasattr(hs, "kruskal_wallis_test")

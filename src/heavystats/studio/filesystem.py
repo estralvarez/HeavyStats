@@ -15,6 +15,12 @@ from heavystats.studio.config import (
     DIR_SALIDAS_UNIVAR_GRAFICOS,
     DIR_SALIDAS_BIVAR_TABLAS,
     DIR_SALIDAS_BIVAR_GRAFICOS,
+    DIR_SALIDAS_MULTIVAR,
+    DIR_SALIDAS_MULTIVAR_TABLAS,
+    DIR_SALIDAS_MULTIVAR_GRAFICOS,
+    DIR_SALIDAS_ATIPICOS,
+    DIR_SALIDAS_ATIPICOS_TABLAS,
+    DIR_SALIDAS_ATIPICOS_GRAFICOS,
 )
 
 
@@ -22,7 +28,8 @@ def crear_estructura_directorios():
     """
     Garantiza la existencia de la jerarquía de carpetas requeridas para el proyecto:
     - datos/ y datos/procesados/
-    - salidas/ organizadas por etapa analítica (QC, Univariante, Bivariante)
+    - salidas/ organizadas por etapa analítica (QC, Univariante, Bivariante, Multivariante, Atípicos)
+    - carpetas de código de cada pilar
     """
     directorios = [
         DIR_DATOS,
@@ -33,6 +40,15 @@ def crear_estructura_directorios():
         DIR_SALIDAS_UNIVAR_GRAFICOS,
         DIR_SALIDAS_BIVAR_TABLAS,
         DIR_SALIDAS_BIVAR_GRAFICOS,
+        DIR_SALIDAS_MULTIVAR,
+        DIR_SALIDAS_MULTIVAR_TABLAS,
+        DIR_SALIDAS_MULTIVAR_GRAFICOS,
+        DIR_SALIDAS_ATIPICOS,
+        DIR_SALIDAS_ATIPICOS_TABLAS,
+        DIR_SALIDAS_ATIPICOS_GRAFICOS,
+        DIR_BASE / "univariante",
+        DIR_BASE / "bivariante",
+        DIR_BASE / "multivariante",
     ]
     for d in directorios:
         d.mkdir(parents=True, exist_ok=True)
@@ -130,10 +146,12 @@ def verificar_proyecto_existente(cfg):
         DIR_SALIDAS_QC,
         DIR_SALIDAS_UNIVAR_TABLAS,
         DIR_SALIDAS_UNIVAR_GRAFICOS,
-        DIR_SALIDAS_BIVAR_TABLAS,
         DIR_SALIDAS_BIVAR_GRAFICOS,
+        DIR_SALIDAS_MULTIVAR_TABLAS,
+        DIR_SALIDAS_MULTIVAR_GRAFICOS,
         DIR_BASE / "univariante",
         DIR_BASE / "bivariante",
+        DIR_BASE / "multivariante",
     ]
     for d in directorios_requeridos:
         if not d.exists() or not d.is_dir():
@@ -144,8 +162,9 @@ def verificar_proyecto_existente(cfg):
         DIR_BASE / "filtros.ipynb",
         DIR_BASE / "univariante" / "01_tablas.ipynb",
         DIR_BASE / "univariante" / "02_graficos.ipynb",
-        DIR_BASE / "bivariante" / "01_analisis_estadistico.ipynb",
         DIR_BASE / "bivariante" / "02_graficos_bivariantes.ipynb",
+        DIR_BASE / "multivariante" / "01_analisis_multivariante_pls.ipynb",
+        DIR_BASE / "multivariante" / "02_analisis_outliers_diagnostico.ipynb",
     ]
     for nb in cuadernos_requeridos:
         if not nb.exists():

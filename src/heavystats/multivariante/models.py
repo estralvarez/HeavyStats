@@ -5,12 +5,15 @@ Modelos multivariantes regularizados y basados en variables latentes:
 """
 
 from typing import Dict, List, Optional, Any, Union, Tuple
+from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LassoCV, Lasso, LassoLarsIC
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.model_selection import KFold
+
+from heavystats.html_utils import BaseReport, render_html_table
 
 
 def prepare_features_matrix(
@@ -49,7 +52,232 @@ def prepare_features_matrix(
     return X_df, col_mapping
 
 
-class LassoModeler:
+def prepare_pls_dataframe(
+    data: Union[pd.DataFrame, str, Path, List[Any]],
+    target_metal: str = "Mercurio_ug_L",
+    id_col: Optional[str] = "Muestra_Codificada",
+    include_domains_totals: bool = True,
+    include_individual_features: bool = True,
+    normalize_diet: bool = True,
+    log_target: bool = False,
+) -> pd.DataFrame:
+    """
+    Construye un nuevo DataFrame estructurado y 100% numérico para análisis PLS (Partial Least Squares)
+    y modelado multivariante, transformando sistemáticamente las variables de la encuesta por dominio:
+
+    1. Hábitos Dietarios (Alim_*): Frecuencias ordinales estandarizadas [0.0 - 1.0] (división entre 4.0 si normalize_diet=True).
+    2. Hábitos y Salud en el Hogar (Salud_Fuma, Salud_Actividad, Salud_Bombillos, Salud_Techo, Salud_Joyeria, etc.): Codificación binaria (1.0 / 0.0).
+    3. Movilidad Urbana (Salud_Transporte_*): Binarización (1.0 / 0.0).
+    4. Fuentes Hídricas (Salud_Agua_*): Binarización (1.0 / 0.0).
+    5. Exposición Antrópica (Exposicion_Talleres_*, Exposicion_Lugares_*, Exposicion_Industrias_*): Binarización (1.0 / 0.0).
+    6. Indicadores de Riesgo (Exposicion_Cualquier_*, Salud_Cualquier_*): Binarización (1.0 / 0.0).
+    7. Totales Consolidados por Dominio [0.0 - 1.0] (si include_domains_totals=True):
+       - Tot_Dieta_Norm, Tot_Habitos_Norm, Tot_Movilidad_Norm, Tot_Agua_Norm,
+         Tot_Exp_Antropica_Norm, Tot_Riesgo_Norm, Exposicion_Total_Norm.
+    8. Sociodemográficas cuantitativas y factores generales (Edad, Sexo, Es_Expuesto, Score_Riesgo) si están presentes.
+    9. Concentración del metal objetivo (target_metal) y columna identificadora (id_col).
+
+    Parameters
+    ----------
+    data : Union[pd.DataFrame, str, Path, List[Any]]
+        Dataset analítico original con cuestionario y concentraciones biológicas,
+        ruta al archivo (.csv) o lista de rutas candidatas.
+    target_metal : str, default="Mercurio_ug_L"
+        Nombre de la variable biológica respuesta ('Mercurio_ug_L', 'Plomo_ug_dL', etc.).
+    id_col : str, optional, default="Muestra_Codificada"
+        Columna identificadora de la muestra/individuo a retener como referencia.
+    include_domains_totals : bool, default=True
+        Si True, calcula e incorpora los indicadores agregados y normalizados por dominio.
+    include_individual_features : bool, default=True
+        Si True, incluye las variables individuales transformadas de cada bloque.
+    normalize_diet : bool, default=True
+        Si True, divide las frecuencias dietarias (0 a 4) entre 4.0 para escala [0.0 - 1.0].
+    log_target : bool, default=False
+        Si True, transforma la variable respuesta con logaritmo natural: ln(target_metal).
+
+    Returns
+    -------
+    pd.DataFrame
+        Nuevo DataFrame listo para entrenar modelos PLS (PlsModeler), LASSO o MultivariatePipeline.
+    """
+    def _read_data_file(p: Path) -> pd.DataFrame:
+        try:
+            return pd.read_csv(p, sep=None, engine="python")
+        except Exception:
+            return pd.read_csv(p)
+
+    if isinstance(data, pd.DataFrame):
+        df = data.copy()
+    elif isinstance(data, (str, Path)):
+        p = Path(data)
+        if not p.exists():
+            raise FileNotFoundError(f"No se encontró el archivo de datos especificado en: {p}")
+        df = _read_data_file(p)
+    elif isinstance(data, (list, tuple)):
+        found_path = None
+        for item in data:
+            if isinstance(item, (str, Path)) and Path(item).exists():
+                found_path = Path(item)
+                break
+        if found_path is not None:
+            df = _read_data_file(found_path)
+        else:
+            raise TypeError(
+                f"El argumento 'data' recibió una lista de {len(data)} elementos, pero ninguno es una ruta válida existente. "
+                "Asegúrese de pasar el DataFrame 'df_hg' o una ruta válida."
+            )
+    else:
+        raise TypeError(
+            f"El argumento 'data' debe ser un pd.DataFrame o una ruta válida, recibido: {type(data).__name__}"
+        )
+
+    out_df = pd.DataFrame(index=df.index)
+
+    # 1. Identificador si existe
+    if id_col and id_col in df.columns:
+        out_df[id_col] = df[id_col]
+
+    # 2. Resolver metal objetivo
+    metal_candidates = [target_metal]
+    target_lower = str(target_metal).lower()
+    if "mercurio" in target_lower or "hg" in target_lower:
+        metal_candidates.extend(["Mercurio_ug_L", "Mercurio", "hg", "Mercurio_Sangre"])
+    elif "plomo" in target_lower or "pb" in target_lower:
+        metal_candidates.extend(["Plomo_ug_dL", "Plomo", "pb", "Plomo_Sangre"])
+    elif "cadmio" in target_lower or "cd" in target_lower:
+        metal_candidates.extend(["Cadmio_ug_L", "Cadmio", "cd", "Cadmio_Sangre"])
+
+    resolved_metal = None
+    for cand in metal_candidates:
+        if cand in df.columns:
+            resolved_metal = cand
+            break
+
+    # 3. Sociodemográficas y clínicas
+    if "Edad" in df.columns:
+        out_df["Edad"] = pd.to_numeric(df["Edad"], errors="coerce")
+    if "Sexo" in df.columns:
+        s_str = df["Sexo"].astype(str).str.lower()
+        out_df["Sexo"] = (s_str.isin(["masculino", "m", "1", "hombre", "true"])).astype(float)
+    if "Es_Expuesto" in df.columns:
+        exp_str = df["Es_Expuesto"].astype(str).str.upper()
+        out_df["Es_Expuesto"] = (exp_str.isin(["SI", "1", "TRUE", "S"])).astype(float)
+    if "Score_Riesgo" in df.columns:
+        out_df["Score_Riesgo"] = pd.to_numeric(df["Score_Riesgo"], errors="coerce")
+    if "IMC" in df.columns:
+        out_df["IMC"] = pd.to_numeric(df["IMC"], errors="coerce")
+
+    # 4. Detección de bloques de encuesta
+    cols_alim = [c for c in df.columns if c.startswith("Alim_")]
+    cols_hab = [c for c in ["Salud_Fuma", "Salud_Actividad", "Salud_Bombillos", "Salud_Techo", "Salud_Joyeria"] if c in df.columns]
+    cols_mov = [c for c in ["Salud_Transporte_caminar", "Salud_Transporte_publico", "Salud_Transporte_vehiculo"] if c in df.columns]
+    cols_agua = [c for c in ["Salud_Agua_pozo_profundo", "Salud_Agua_filtrada", "Salud_Agua_mineral_embotellada"] if c in df.columns]
+    cols_antropica = [c for c in [
+        "Exposicion_Talleres_carpinteria", "Exposicion_Talleres_latoneria", "Exposicion_Talleres_mecanico",
+        "Exposicion_Lugares_canales", "Exposicion_Lugares_estacion_gasolina", "Exposicion_Lugares_llenadora_gas_natural",
+        "Exposicion_Lugares_rectificadora_motores", "Exposicion_Lugares_rios", "Exposicion_Industrias_fabrica_metales",
+        "Exposicion_Industrias_fabrica_productos_quimicos"
+    ] if c in df.columns]
+    cols_riesgo = [c for c in [
+        "Exposicion_Cualquier_Taller", "Exposicion_Cualquier_Industria",
+        "Exposicion_Cualquier_Lugar_Riesgo", "Salud_Cualquier_Agua_Riesgo"
+    ] if c in df.columns]
+
+    # Bloque 1: Dieta
+    diet_dict: Dict[str, pd.Series] = {}
+    for c in cols_alim:
+        c_num = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+        c_norm = c_num / 4.0 if normalize_diet else c_num
+        diet_dict[c] = c_norm
+        if include_individual_features:
+            out_df[c] = c_norm
+
+    # Bloque 2: Hábitos
+    hab_dict: Dict[str, pd.Series] = {}
+    for c in cols_hab:
+        s_val = (df[c].astype(str).str.upper().isin(["SI", "1", "TRUE"])).astype(float)
+        hab_dict[c] = s_val
+        if include_individual_features:
+            out_df[c] = s_val
+
+    # Bloque 3: Movilidad
+    mov_dict: Dict[str, pd.Series] = {}
+    for c in cols_mov:
+        s_val = pd.to_numeric(df[c], errors="coerce").fillna(0.0).astype(float)
+        mov_dict[c] = s_val
+        if include_individual_features:
+            out_df[c] = s_val
+
+    # Bloque 4: Fuentes de agua
+    agua_dict: Dict[str, pd.Series] = {}
+    for c in cols_agua:
+        s_val = pd.to_numeric(df[c], errors="coerce").fillna(0.0).astype(float)
+        agua_dict[c] = s_val
+        if include_individual_features:
+            out_df[c] = s_val
+
+    # Bloque 5: Exposición antrópica
+    ant_dict: Dict[str, pd.Series] = {}
+    for c in cols_antropica:
+        s_val = pd.to_numeric(df[c], errors="coerce").fillna(0.0).astype(float)
+        ant_dict[c] = s_val
+        if include_individual_features:
+            out_df[c] = s_val
+
+    # Bloque 6: Indicadores agregados de riesgo
+    rie_dict: Dict[str, pd.Series] = {}
+    for c in cols_riesgo:
+        s_val = pd.to_numeric(df[c], errors="coerce").fillna(0.0).astype(float)
+        rie_dict[c] = s_val
+        if include_individual_features:
+            out_df[c] = s_val
+
+    # Bloque 7: Indicadores consolidados por dominio [0.0 - 1.0]
+    if include_domains_totals:
+        if diet_dict:
+            out_df["Tot_Dieta_Norm"] = pd.DataFrame(diet_dict).mean(axis=1)
+        if hab_dict:
+            out_df["Tot_Habitos_Norm"] = pd.DataFrame(hab_dict).mean(axis=1)
+        if mov_dict:
+            out_df["Tot_Movilidad_Norm"] = pd.DataFrame(mov_dict).mean(axis=1)
+        if agua_dict:
+            out_df["Tot_Agua_Norm"] = pd.DataFrame(agua_dict).mean(axis=1)
+        if ant_dict:
+            out_df["Tot_Exp_Antropica_Norm"] = pd.DataFrame(ant_dict).mean(axis=1)
+        if rie_dict:
+            out_df["Tot_Riesgo_Norm"] = pd.DataFrame(rie_dict).mean(axis=1)
+
+        # Carga de exposición global
+        all_features_dicts = {}
+        all_features_dicts.update(diet_dict)
+        all_features_dicts.update(hab_dict)
+        all_features_dicts.update(mov_dict)
+        all_features_dicts.update(agua_dict)
+        all_features_dicts.update(ant_dict)
+        all_features_dicts.update(rie_dict)
+        if all_features_dicts:
+            out_df["Exposicion_Total_Norm"] = pd.DataFrame(all_features_dicts).mean(axis=1)
+
+    # Imputar medianas a cualquier NaN residual en columnas numéricas
+    for col in out_df.columns:
+        if col != id_col:
+            out_df[col] = pd.to_numeric(out_df[col], errors="coerce")
+            if out_df[col].isna().any():
+                med_val = out_df[col].median()
+                out_df[col] = out_df[col].fillna(0.0 if pd.isna(med_val) else med_val)
+
+    # 8. Variable biológica respuesta
+    if resolved_metal is not None:
+        y_vals = pd.to_numeric(df[resolved_metal], errors="coerce")
+        if log_target:
+            out_df[resolved_metal] = np.log(y_vals)
+        else:
+            out_df[resolved_metal] = y_vals
+
+    return out_df
+
+
+class LassoModeler(BaseReport):
     """
     Ajustador de Regresión LASSO (L1 penalizado).
     
@@ -163,8 +391,26 @@ class LassoModeler:
         df = pd.DataFrame(records)
         return df.sort_values(by="Beta_Estandarizado", ascending=False).reset_index(drop=True)
 
+    def to_dataframe(self) -> pd.DataFrame:
+        """Retorna la tabla resumen de coeficientes LASSO en un DataFrame."""
+        return self.summary_df
 
-class PlsModeler:
+    def to_html(self, filepath: Optional[str] = None, full_page: bool = False) -> str:
+        """Exporta la tabla resumen de LASSO a HTML de calidad editorial."""
+        df = self.to_dataframe()
+        html_code = render_html_table(
+            df=df,
+            title="Selección y Coeficientes Estandarizados (Regresión LASSO)",
+            subtitle=f"Modelo L1 con penalización α = {self.alpha_:.4f} (R² = {self.r2_:.3f})",
+            full_page=full_page
+        )
+        if filepath:
+            self._write_file(filepath, html_code)
+        return html_code
+
+
+
+class PlsModeler(BaseReport):
     """
     Ajustador de Regresión por Mínimos Cuadrados Parciales (PLS-R).
     
@@ -278,9 +524,27 @@ class PlsModeler:
                 "Variable": name,
                 "VIP": float(vip_val),
                 "Coef_PLS": float(coef),
-                "Influencia_PLS": "Crítica (VIP ≥ 1.0)" if is_critical else "Moderada/Baja (VIP < 1.0)",
+                "Influencia_PLS": "Crítica (VIP >= 1.0)" if is_critical else "Moderada/Baja (VIP < 1.0)",
                 "Es_Critico": is_critical
             })
 
         df = pd.DataFrame(records)
         return df.sort_values(by="VIP", ascending=False).reset_index(drop=True)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """Retorna la tabla resumen con los puntajes VIP y coeficientes PLS."""
+        return self.summary_df
+
+    def to_html(self, filepath: Optional[str] = None, full_page: bool = False) -> str:
+        """Exporta la tabla de resultados PLS a formato HTML de calidad editorial."""
+        df = self.to_dataframe()
+        html_code = render_html_table(
+            df=df,
+            title="Importancia de Variables en la Proyección (PLS-R VIP)",
+            subtitle=f"Modelo PLS-R con {self.n_components} componentes latentes (R² = {self.r2_:.3f})",
+            full_page=full_page
+        )
+        if filepath:
+            self._write_file(filepath, html_code)
+        return html_code
+

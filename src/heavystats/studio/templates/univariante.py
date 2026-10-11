@@ -34,7 +34,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import heavystats as hs
-from heavystats.univariate import UnivariateTables
+from heavystats.univariante import UnivariateTables
 
 base_dir = Path.cwd() if (Path.cwd() / "datos").exists() else Path.cwd().parent
 ruta_poblacion = base_dir / "datos" / "procesados" / "datos_poblacion_procesados_N48.csv"
@@ -132,14 +132,13 @@ Exportamos todas las tablas generadas a la carpeta `salidas/univariante/tablas/`
             "contenido": f"""salidas_tablas = base_dir / "salidas" / "univariante" / "tablas"
 salidas_tablas.mkdir(parents=True, exist_ok=True)
 
-report_metal.to_html(str(salidas_tablas / "tabla_toxicologica_{key}.html"), full_page=True)
-report_metal.to_excel(str(salidas_tablas / "tabla_toxicologica_{key}.xlsx"))
+report_metal.save(str(salidas_tablas / "tabla_toxicologica_{key}"))
+report_cat.save(str(salidas_tablas / "resumen_categorico"))
+report_num.save(str(salidas_tablas / "resumen_numerico"))
+report_log.save(str(salidas_tablas / "evaluacion_logaritmica_{key}"))
+report_bmi.save(str(salidas_tablas / "resumen_imc"))
 
-report_cat.to_excel(str(salidas_tablas / "resumen_categorico.xlsx"), sheet_name="Categoricas")
-report_num.to_excel(str(salidas_tablas / "resumen_numerico.xlsx"), sheet_name="Numericas")
-report_log.to_html(str(salidas_tablas / "evaluacion_logaritmica_{key}.html"), full_page=True)
-
-print(f"¡Tablas univariantes de {nombre} exportadas con éxito en: {{salidas_tablas}}!")"""
+print(f"[OK] Tablas univariantes de {nombre} exportadas en HTML, CSV y JSON en: {{salidas_tablas}}")"""
         }
     ]
 
@@ -180,7 +179,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 import heavystats as hs
-from heavystats.univariate import UnivariatePlots
+from heavystats.univariante import UnivariatePlots
 
 base_dir = Path.cwd() if (Path.cwd() / "datos").exists() else Path.cwd().parent
 ruta_metal = base_dir / "datos" / "procesados" / "{archivo_proc}"
@@ -373,6 +372,28 @@ fig_determinantes.tight_layout()
 plt.show()
 
 print(f"¡Figuras univariantes guardadas exitosamente en: {salidas_graficos}!")"""
+        },
+        {
+            "tipo": "markdown",
+            "contenido": """---
+## 6. Consolidación de Tablas e Imágenes en Documento PDF Único
+
+Integramos todas las tablas y figuras generadas del pilar univariante en un documento PDF multipágina con portada institucional."""
+        },
+        {
+            "tipo": "code",
+            "contenido": f"""from heavystats.reporte_pdf import unir_pilar_pdf
+
+pdf_univariante = unir_pilar_pdf(
+    pilar="univariante",
+    ruta_pdf=base_dir / "salidas" / "univariante" / "informe_univariante_{key}.pdf",
+    directorio_salidas=base_dir / "salidas" / "univariante",
+    titulo="PILAR UNIVARIANTE: PERFIL DESCRIPTIVO Y DISTRIBUCIONES ({nombre})",
+    subtitulo="Caracterización Toxicológica Basal de {nombre} ({simbolo})",
+    autor="Br. Jose Daniel Estrada Alvarez",
+    tutor="Dr. Jose Ramon Jimenez Ochoa"
+)
+print(f"[OK] Documento consolidado generado: {{pdf_univariante}}")"""
         }
     ]
 

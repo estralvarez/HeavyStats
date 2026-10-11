@@ -55,3 +55,4 @@ env/
 .env.*
 
 salidas/
+notebooks/

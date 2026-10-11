@@ -12,7 +12,7 @@ import pandas as pd
 from heavystats.multivariante.screening import MultivariateScreening
 from heavystats.multivariante.models import LassoModeler, PlsModeler, prepare_features_matrix
 from heavystats.multivariante.reports import MultivariateTableReport
-from heavystats.bivariate.constants import DEFAULT_LABELS_MAP, get_label
+from heavystats.bivariante.constants import DEFAULT_LABELS_MAP, get_label
 
 
 class MultivariatePipeline:
@@ -216,22 +216,28 @@ class MultivariatePipeline:
         assert self.report_ is not None
         return self.report_
 
-    def export_latex(
-        self, 
-        filepath: str, 
-        caption: Optional[str] = None, 
-        label: str = "tab:multivariante_factores"
-    ) -> str:
-        """Exporta la tabla a formato LaTeX con el paquete booktabs."""
+    def export_json(self, filepath: str, **kwargs: Any) -> str:
+        """Exporta la estructura completa del reporte a formato JSON estructurado."""
         rep = self.get_report()
-        return rep.to_latex(filepath=filepath, caption=caption, label=label)
+        return rep.to_json(filepath=filepath, **kwargs)
 
-    def export_html(self, filepath: str) -> None:
+    def export_csv(self, filepath: str, **kwargs: Any) -> str:
+        """Exporta la tabla analítica consolidada a formato CSV."""
+        rep = self.get_report()
+        return rep.to_csv(filepath=filepath, **kwargs)
+
+    def export_html(self, filepath: str, full_page: bool = True) -> str:
         """Exporta el reporte interactivo completo en formato HTML."""
         rep = self.get_report()
-        rep.to_html(filepath)
+        return rep.to_html(filepath=filepath, full_page=full_page)
 
     def export_excel(self, filepath: str) -> None:
         """Exporta las tablas a un libro de Excel con múltiples hojas."""
         rep = self.get_report()
-        rep.to_excel(filepath)
+        df = rep.to_dataframe()
+        df.to_excel(filepath, index=False)
+
+
+# Alias en español para máxima accesibilidad
+PipelineMultivariante = MultivariatePipeline
+

@@ -92,8 +92,8 @@ Guardamos los resultados de la auditoría en la carpeta de salidas `salidas/cont
             "contenido": f"""salidas_qc = base_dir / "salidas" / "control_calidad"
 salidas_qc.mkdir(parents=True, exist_ok=True)
 
-report_val.to_html(str(salidas_qc / "reporte_validacion_{key}.html"), full_page=True)
-print(f"Reporte de validación exportado en: {{salidas_qc / 'reporte_validacion_{key}.html'}}")"""
+report_val.save(str(salidas_qc / "reporte_validacion_{key}"))
+print(f"[OK] Reporte de validación exportado en HTML, CSV y JSON en: {{salidas_qc}}")"""
         }
     ]
 

@@ -495,7 +495,7 @@ def render_html_table(
 class BaseReport:
     """
     Clase base reutilizable para todos los reportes de HeavyStats.
-    Proporciona exportación a archivos (HTML, CSV, Excel), renderizado HTML para Jupyter
+    Proporciona exportación a archivos (HTML, CSV, JSON), renderizado HTML para Jupyter
     y métodos estándar de representación.
     """
     def _write_file(self, filepath: Optional[str], content: str) -> None:
@@ -507,10 +507,63 @@ class BaseReport:
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(content)
 
+    def to_dataframe(self) -> pd.DataFrame:
+        """Retorna la representación tabular en pd.DataFrame del reporte."""
+        if hasattr(self, "_df") and isinstance(self._df, pd.DataFrame):
+            return self._df.copy()
+        elif hasattr(self, "df"):
+            df_val = getattr(self, "df")
+            return df_val.copy() if isinstance(df_val, pd.DataFrame) else pd.DataFrame(df_val)
+        raise NotImplementedError("Subclase debe implementar to_dataframe() o definir self._df")
+
+    def to_csv(self, filepath: Optional[str] = None, index: bool = False, **kwargs) -> str:
+        """Exporta la tabla analítica del reporte a formato CSV."""
+        df = self.to_dataframe()
+        csv_str = df.to_csv(index=index, **kwargs)
+        if filepath:
+            self._write_file(filepath, csv_str)
+        return csv_str
+
+    def to_json(self, filepath: Optional[str] = None, orient: str = "records", indent: int = 2, force_ascii: bool = False, **kwargs) -> str:
+        """Exporta la estructura completa del reporte a formato JSON estructurado."""
+        df = self.to_dataframe()
+        json_str = df.to_json(orient=orient, indent=indent, force_ascii=force_ascii, **kwargs)
+        if filepath:
+            self._write_file(filepath, json_str)
+        return json_str
+
     def to_html(self, filepath: Optional[str] = None, full_page: bool = False) -> str:
         """Genera el código HTML con calidad de publicación del reporte."""
         raise NotImplementedError("Subclase debe implementar to_html()")
 
+    def save(self, base_filepath: str, include_json: bool = True) -> Dict[str, str]:
+        """
+        Guarda el reporte en las representaciones auxiliares oficiales:
+        HTML (interactivo y editorial), CSV (análisis tabular) y JSON (interoperabilidad).
+        """
+        base = str(base_filepath)
+        for ext in [".html", ".csv", ".json", ".tex"]:
+            if base.endswith(ext):
+                base = base[:-len(ext)]
+                break
+
+        saved = {}
+        filepath_html = f"{base}.html"
+        self.to_html(filepath_html)
+        saved["html"] = filepath_html
+
+        filepath_csv = f"{base}.csv"
+        self.to_csv(filepath_csv)
+        saved["csv"] = filepath_csv
+
+        if include_json:
+            filepath_json = f"{base}.json"
+            self.to_json(filepath_json)
+            saved["json"] = filepath_json
+
+        return saved
+
     def _repr_html_(self) -> str:
         """Renderizado interactivo automático en HTML para celdas de Jupyter Notebook."""
         return self.to_html()
+

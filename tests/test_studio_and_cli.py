@@ -49,11 +49,14 @@ def test_app_instantiation():
     assert app.TITLE == "HeavyStats Studio"
 
 
-def test_notebook_templates_generation():
+def test_notebook_templates_generation(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     import json
     from heavystats.studio.templates import (
         generar_cuaderno_univariante_graficos,
         generar_cuaderno_bivariante_graficos,
+        generar_cuaderno_multivariante_pls,
+        generar_cuaderno_atipicos_diagnostico,
     )
     for metal in ["plomo", "mercurio", "cadmio"]:
         cfg = METALES_CONFIG[metal]
@@ -70,7 +73,22 @@ def test_notebook_templates_generation():
         assert "cells" in content_b
         source_b = "".join("".join(c["source"]) for c in content_b["cells"])
         assert "subcohort_contrast_plot" in source_b
-        assert "survey_radiography_plot" in source_b
         assert "similarity_ranking_plot" in source_b
         assert "scan_subcohort_contrasts" in source_b
+
+        nb_m = generar_cuaderno_multivariante_pls(cfg)
+        assert nb_m.exists()
+        content_m = json.loads(nb_m.read_text(encoding="utf-8"))
+        assert "cells" in content_m
+        source_m = "".join("".join(c["source"]) for c in content_m["cells"])
+        assert "PlsModeler" in source_m
+        assert "unir_pilar_pdf" in source_m
+
+        nb_a = generar_cuaderno_atipicos_diagnostico(cfg)
+        assert nb_a.exists()
+        content_a = json.loads(nb_a.read_text(encoding="utf-8"))
+        assert "cells" in content_a
+        source_a = "".join("".join(c["source"]) for c in content_a["cells"])
+        assert "DiagnosticoAtipicos" in source_a
+        assert "unir_pilar_pdf" in source_a
 
