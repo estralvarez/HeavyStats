@@ -20,33 +20,33 @@
 
 ---
 
-## 🌟 Características Principales
+## Características Principales
 
-- **🖥️ HeavyStats Studio & CLI**: Entorno de terminal interactivo (TUI basada en Textual) y orquestador automatizado para generar proyectos completos con sus 4 pilares analíticos y **7 cuadernos reproducibles** organizados por metal (Plomo, Mercurio, Cadmio).
-- **🔬 Control de Calidad Automatizado**: Validación metodológica formal mediante 10 reglas sistemáticas (límites analíticos LOD/LOQ, rangos biológicos plausibles, consistencia antropométrica CDC/OMS y trazabilidad de duplicados).
-- **🧹 Preprocesamiento Epidemiológico y por Dominios**: Limpieza de encuestas, decodificación estandarizada, desagregación de multirrespuestas, matrices dietarias normalizadas e ingeniería de indicadores compuestos de exposición.
-- **📊 Bioestadística Univariante con Calidad de Publicación**:
+- **HeavyStats Studio & CLI**: Entorno de terminal interactivo (TUI basada en Textual) y orquestador automatizado para generar proyectos completos con sus 4 pilares analíticos y **7 cuadernos reproducibles** organizados por metal (Plomo, Mercurio, Cadmio).
+- **Control de Calidad Automatizado**: Validación metodológica formal mediante 10 reglas sistemáticas (límites analíticos LOD/LOQ, rangos biológicos plausibles, consistencia antropométrica CDC/OMS y trazabilidad de duplicados).
+- **Preprocesamiento Epidemiológico y por Dominios**: Limpieza de encuestas, decodificación estandarizada, desagregación de multirrespuestas, matrices dietarias normalizadas e ingeniería de indicadores compuestos de exposición.
+- **Bioestadística Univariante con Calidad de Publicación**:
   - Resúmenes robustos (mediana, IQR, media ± DE, percentiles biológicos y contraste frente a umbrales CDC/OMS/EPA).
   - Tablas editoriales formateadas (estilo APA/médico) con visualización HTML forzada en modo claro, exportables a Excel, CSV y LaTeX (`booktabs`).
   - Figuras descriptivas a 300 DPI (histogramas con densidad KDE, boxplots con umbrales toxicológicos y gráficos Q-Q).
-- **📈 Bioestadística Bivariante y Contrastes de Subcohorte**:
+- **Bioestadística Bivariante y Contrastes de Subcohorte**:
   - Pruebas no paramétricas y paramétricas con anotación directa en corchetes (*brackets*): Mann-Whitney $U$, Kruskal-Wallis, Dunn *post-hoc*, $t$ de Welch y ANOVA de 1 vía.
   - Gradientes ordinales dosis-respuesta (Jonckheere-Terpstra y Pearson).
   - Correlaciones con intervalos de confianza al 95% calculados por **Bootstrap (2,000 réplicas)**: Spearman $\rho_s$, Kendall $\tau_b$, Pearson $r$ y matrices térmicas de co-exposición.
   - Análisis dietario y de subcohorte: perfiles polares (radar charts), rankings de correlación y distancia (`similarity_ranking_plot`), y tamizaje automatizado de contrastes significativos en sujetos de alta carga corporal (`scan_subcohort_contrasts`).
-- **🧬 Modelado Quimiométrico Multivariante (PLS-1 & VIP)**:
+- **Modelado Quimiométrico Multivariante (PLS-1 & VIP)**:
   - Regresión por Mínimos Cuadrados Parciales (PLS-1) con proyección en componentes latentes y auto-escalado.
   - Deducción analítica del vector de **Importancia de Variables en la Proyección (VIP Scores)** con umbral de relevancia crítica ($\text{VIP} \ge 1.0$).
   - Biplots de pesos $w_1$ vs $w_2$, cuadrantes epidemiológicos de impacto ($\beta_{\text{PLS}}$ vs $\text{VIP}$) y curvas observados vs predichos a 300 DPI.
   - Regularización lineal (Lasso) y screening automatizado de predictores relevantes.
-- **🔍 Diagnóstico Quimiométrico y Detección de Valores Atípicos**:
+- **Diagnóstico Quimiométrico y Detección de Valores Atípicos**:
   - Detección univariante: Vallas de Tukey (1.5 IQR y 3.0 IQR), Test exacto de Grubbs bilateral y Z-scores modificados por MAD.
   - Diagnóstico multivariante en espacio latente: Puntuaciones con elipse de confianza al 95%, distancia $T^2$ de Hotelling frente al umbral crítico $F$ de Snedecor, residuales $Q$ (SPE), apalancamiento ($h_{ii}$) y distancia de Cook ($D_i$).
-- **📑 Compilación Editorial en PDF (`unir_pilar_pdf`)**: Consolidación automática de tablas y figuras por pilar analítico en informes PDF multipágina con portada institucional.
+- **Compilación Editorial en PDF (`unir_pilar_pdf`)**: Consolidación automática de tablas y figuras por pilar analítico en informes PDF multipágina con portada institucional.
 
 ---
 
-## 📦 Instalación
+## Instalación
 
 Instala la versión estable desde PyPI con `pip`:
 
@@ -70,7 +70,7 @@ uv pip install -e .
 
 ---
 
-## 🖥️ HeavyStats Studio (TUI & CLI)
+## HeavyStats Studio (TUI & CLI)
 
 HeavyStats incluye un estudio interactivo de terminal para inicializar, auditar y generar automáticamente proyectos completos de investigación estructurados en 4 pilares y **7 cuadernos reproducibles**.
 
@@ -327,7 +327,7 @@ print(f"Informe compilado: {pdf_path}")
 
 ---
 
-## 📋 Módulos de la Biblioteca
+## Módulos de la Biblioteca
 
 HeavyStats implementa una arquitectura modular con nombres canónicos en español y alias equivalentes en inglés:
 
@@ -347,7 +347,7 @@ HeavyStats implementa una arquitectura modular con nombres canónicos en españo
 
 ---
 
-## 🧪 Pruebas Automatizadas
+## Pruebas Automatizadas
 
 La biblioteca cuenta con pruebas unitarias exhaustivas con `pytest`:
 
@@ -357,7 +357,7 @@ uv run pytest tests/ -v
 
 ---
 
-## 📖 Cita y Referencias
+## Cita y Referencias
 
 Si utilizas `heavystats` en tus investigaciones científicas, tesis de grado o proyectos epidemiológicos, por favor cita la biblioteca:
 
@@ -373,7 +373,7 @@ Si utilizas `heavystats` en tus investigaciones científicas, tesis de grado o p
 
 ---
 
-## 📄 Licencia
+## Licencia
 
 Este proyecto está bajo la Licencia **MIT**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
 
