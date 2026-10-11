@@ -140,7 +140,7 @@ Al seleccionar un metal (ej. Mercurio), Studio genera la estructura analítica n
 
 ---
 
-## 🚀 Guía de Inicio Rápido (Quickstart)
+## Guía de Inicio Rápido (Quickstart)
 
 ### 1. Carga y Control de Calidad de Datos
 
