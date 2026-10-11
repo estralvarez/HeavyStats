@@ -77,7 +77,7 @@ class ExecutionScreen(ModalScreen):
                 f"Generando Proyecto y Cuadernos: {self.cfg['nombre']} ({self.cfg['simbolo']})",
                 id="lbl-titulo"
             )
-            yield ProgressBar(total=8, show_percentage=True, id="pbar")
+            yield ProgressBar(total=9, show_percentage=True, id="pbar")
             yield Label("Iniciando pipeline analítico...", id="lbl-status")
             yield RichLog(id="log-console", highlight=True, markup=True)
             with Horizontal(id="box-btn-finalizar"):
@@ -103,7 +103,7 @@ class ExecutionScreen(ModalScreen):
         lbl = self.query_one("#lbl-status", Label)
         log = self.query_one("#log-console", RichLog)
 
-        pbar.update(progress=paso)
+        pbar.update(total=total, progress=paso)
         lbl.update(f"Paso {paso}/{total}: {mensaje}")
         log.write(f"[bold cyan][{paso}/{total}][/] {mensaje}")
 

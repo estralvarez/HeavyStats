@@ -186,9 +186,10 @@ class MainScreen(Screen):
                         yield Label("• validacion.ipynb (Auditoría de Datos)", classes="item-cuaderno")
                         yield Label("• filtros.ipynb (Preprocesamiento de muestra analítica)", classes="item-cuaderno")
                         yield Label("• univariante/01_tablas.ipynb (Resumen Estadístico Toxicológico)", classes="item-cuaderno")
-                        yield Label("• univariante/02_graficos.ipynb (Graficos Estadísticos Descriptivos)", classes="item-cuaderno")
-                        yield Label("• bivariante/01_analisis_estadistico.ipynb (Analisis Estadístico Bivariante)", classes="item-cuaderno")
-                        yield Label("• bivariante/02_graficos_bivariantes.ipynb (Graficos Estadísticos Bivariantes)", classes="item-cuaderno")
+                        yield Label("• univariante/02_graficos.ipynb (Gráficos Estadísticos Descriptivos)", classes="item-cuaderno")
+                        yield Label("• bivariante/02_graficos_bivariantes.ipynb (Gráficos Estadísticos Bivariantes)", classes="item-cuaderno")
+                        yield Label("• multivariante/01_analisis_multivariante_pls.ipynb (Modelado Quimiométrico PLS-1)", classes="item-cuaderno")
+                        yield Label("• multivariante/02_analisis_outliers_diagnostico.ipynb (Diagnóstico de Atípicos y Quimiometría)", classes="item-cuaderno")
 
             with Horizontal(id="actions-bar"):
                 yield Button("Generar Proyecto y Cuadernos (Enter)", variant="primary", id="btn-generar")

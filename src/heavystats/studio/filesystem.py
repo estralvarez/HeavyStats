@@ -149,6 +149,8 @@ def verificar_proyecto_existente(cfg):
         DIR_SALIDAS_BIVAR_GRAFICOS,
         DIR_SALIDAS_MULTIVAR_TABLAS,
         DIR_SALIDAS_MULTIVAR_GRAFICOS,
+        DIR_SALIDAS_ATIPICOS_TABLAS,
+        DIR_SALIDAS_ATIPICOS_GRAFICOS,
         DIR_BASE / "univariante",
         DIR_BASE / "bivariante",
         DIR_BASE / "multivariante",
