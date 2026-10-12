@@ -131,7 +131,7 @@ def test_outlier_reports(sample_cohort):
     html_diag = rep_diag.to_html()
     assert "<table" in html_diag
 
-    # Verificar accesibilidad en español y compilación de informe PDF
-    from heavystats.atipicos import DiagnosticoAtipicos, unir_pilar_pdf
+    # Verificar accesibilidad en español
+    from heavystats.atipicos import DiagnosticoAtipicos
     assert DiagnosticoAtipicos is OutlierDiagnostics
 

@@ -430,28 +430,6 @@ fig_sub_mosaic.savefig(salidas_graficos / "mosaico_subcohorte_editorial_{key}.pd
 plt.show()
 
 print(f"\\n¡Todas las figuras bivariantes de {nombre} fueron generadas y exportadas con éxito en:\\n  -> {{salidas_graficos.resolve()}}")"""
-        },
-        {
-            "tipo": "markdown",
-            "contenido": """---
-## 7. Consolidación de Figuras en Documento PDF Único
-
-Integramos todas las figuras bivariantes a 300 DPI en un documento PDF consolidado con portada institucional."""
-        },
-        {
-            "tipo": "code",
-            "contenido": f"""from heavystats.reporte_pdf import unir_pilar_pdf
-
-pdf_bivariante = unir_pilar_pdf(
-    pilar="bivariante",
-    ruta_pdf=base_dir / "salidas" / "bivariante" / "informe_bivariante_{key}.pdf",
-    directorio_salidas=base_dir / "salidas" / "bivariante",
-    titulo="PILAR BIVARIANTE: ASOCIACIONES Y CONTRASTES EPIDEMIOLÓGICOS ({nombre})",
-    subtitulo="Inferencia ({tipo_analisis.capitalize()}) y Perfil Dietario de {nombre}",
-    autor="Br. Jose Daniel Estrada Alvarez",
-    tutor="Dr. Jose Ramon Jimenez Ochoa"
-)
-print(f"[OK] Documento consolidado generado: {{pdf_bivariante}}")"""
         }
     ]
 

@@ -42,7 +42,6 @@
 - **Diagnóstico Quimiométrico y Detección de Valores Atípicos**:
   - Detección univariante: Vallas de Tukey (1.5 IQR y 3.0 IQR), Test exacto de Grubbs bilateral y Z-scores modificados por MAD.
   - Diagnóstico multivariante en espacio latente: Puntuaciones con elipse de confianza al 95%, distancia $T^2$ de Hotelling frente al umbral crítico $F$ de Snedecor, residuales $Q$ (SPE), apalancamiento ($h_{ii}$) y distancia de Cook ($D_i$).
-- **Compilación Editorial en PDF (`unir_pilar_pdf`)**: Consolidación automática de tablas y figuras por pilar analítico en informes PDF multipágina con portada institucional.
 
 ---
 
@@ -306,27 +305,6 @@ fig_dashboard = graficos_out.multipanel_dashboard()
 
 ---
 
-### 6. Consolidación Editorial en PDF
-
-```python
-from heavystats.reporte_pdf import unir_pilar_pdf
-from pathlib import Path
-
-# Compilar todas las tablas y figuras del pilar en un informe único
-pdf_path = unir_pilar_pdf(
-    pilar="multivariante",
-    ruta_pdf=Path("salidas/multivariante/informe_multivariante_consolidado.pdf"),
-    directorio_salidas=Path("salidas/multivariante"),
-    titulo="PILAR MULTIVARIANTE: MODELADO PLS-1 Y RANKING VIP",
-    subtitulo="Determinantes de Exposición a Mercurio en Sangre",
-    autor="Br. Jose Daniel Estrada Alvarez",
-    tutor="Dr. Jose Ramon Jimenez Ochoa"
-)
-print(f"Informe compilado: {pdf_path}")
-```
-
----
-
 ## Módulos de la Biblioteca
 
 HeavyStats implementa una arquitectura modular con nombres canónicos en español y alias equivalentes en inglés:
@@ -342,7 +320,6 @@ HeavyStats implementa una arquitectura modular con nombres canónicos en españo
 | `heavystats.multivariante` | `heavystats.multivariate` | Modelado PLS-1, cálculo analítico de VIP, regularización Lasso y biplots 300 DPI. |
 | `heavystats.atipicos` | `heavystats.outliers` | Detección univariante (Tukey, Grubbs) y quimiométrica ($T^2$ de Hotelling, $Q$, Cook, apalancamiento). |
 | `heavystats.comparation` | — | Comparación poblacional de riesgo y análisis de exposición por sectores. |
-| `heavystats.reporte_pdf` | — | Motor de consolidación y compilación de informes PDF institucionales con portada. |
 | `heavystats.html_utils` | — | Renderizado HTML editorial con soporte forzado para visualización clara en Jupyter/IDE. |
 
 ---
@@ -366,7 +343,7 @@ Si utilizas `heavystats` en tus investigaciones científicas, tesis de grado o p
   author = {Estrada Alvarez, Jose Daniel},
   title = {HeavyStats: Framework bioestadístico y quimiométrico para el biomonitoreo de metales pesados en salud infantil},
   year = {2026},
-  version = {0.5.0a},
+  version = {0.5.1},
   url = {https://github.com/estralvarez/HeavyStats}
 }
 ```

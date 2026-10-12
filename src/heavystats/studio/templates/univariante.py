@@ -372,28 +372,6 @@ fig_determinantes.tight_layout()
 plt.show()
 
 print(f"¡Figuras univariantes guardadas exitosamente en: {salidas_graficos}!")"""
-        },
-        {
-            "tipo": "markdown",
-            "contenido": """---
-## 6. Consolidación de Tablas e Imágenes en Documento PDF Único
-
-Integramos todas las tablas y figuras generadas del pilar univariante en un documento PDF multipágina con portada institucional."""
-        },
-        {
-            "tipo": "code",
-            "contenido": f"""from heavystats.reporte_pdf import unir_pilar_pdf
-
-pdf_univariante = unir_pilar_pdf(
-    pilar="univariante",
-    ruta_pdf=base_dir / "salidas" / "univariante" / "informe_univariante_{key}.pdf",
-    directorio_salidas=base_dir / "salidas" / "univariante",
-    titulo="PILAR UNIVARIANTE: PERFIL DESCRIPTIVO Y DISTRIBUCIONES ({nombre})",
-    subtitulo="Caracterización Toxicológica Basal de {nombre} ({simbolo})",
-    autor="Br. Jose Daniel Estrada Alvarez",
-    tutor="Dr. Jose Ramon Jimenez Ochoa"
-)
-print(f"[OK] Documento consolidado generado: {{pdf_univariante}}")"""
         }
     ]
 

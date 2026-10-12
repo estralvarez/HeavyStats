@@ -47,8 +47,7 @@ Este cuaderno ejecuta el protocolo completo de evaluación de atípicos e influe
    - Espacio latente de puntuaciones ($T_1$ vs $T_2$).
    - Espacio de influencia ($T^2$ vs $Q$).
    - Apalancamiento vs Distancia de Cook.
-   - Dashboard integral multipanel 2x2.
-5. **Consolidación en PDF** (`unir_pilar_pdf`)."""
+   - Dashboard integral multipanel 2x2."""
         },
         {
             "tipo": "markdown",
@@ -77,7 +76,6 @@ from heavystats.atipicos import (
     ReporteAtipicosUnivariante,
     ReporteDiagnosticoAtipicos,
     ReporteContrasteEstratos,
-    unir_pilar_pdf,
 )
 
 # Definición de rutas base y directorios de salida
@@ -213,26 +211,6 @@ fig5, _ = op.plot_dashboard_2x2(
 )
 fig5.savefig(GRAFICOS_DIR / "figura_05_dashboard_diagnostico_2x2.pdf", dpi=300, bbox_inches="tight")
 plt.show()"""
-        },
-        {
-            "tipo": "markdown",
-            "contenido": """---
-## 6. Consolidación de Tablas e Imágenes en Documento PDF Único
-
-Integramos todas las tablas y figuras de atípicos en un documento PDF multipágina con portada institucional."""
-        },
-        {
-            "tipo": "code",
-            "contenido": f"""pdf_atipicos = unir_pilar_pdf(
-    pilar="atipicos",
-    ruta_pdf=OUTPUT_DIR / "informe_atipicos_consolidado.pdf",
-    directorio_salidas=OUTPUT_DIR,
-    titulo="PILAR ATÍPICOS: DIAGNÓSTICO QUIMIOMÉTRICO Y VALORES EXTREMOS",
-    subtitulo="Consistencia Analítica y Detección de Casos Influyentes ({nombre})",
-    autor="Br. Jose Daniel Estrada Alvarez",
-    tutor="Dr. Jose Ramon Jimenez Ochoa"
-)
-print(f"[OK] Documento consolidado generado: {{pdf_atipicos}}")"""
         }
     ]
 

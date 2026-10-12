@@ -42,9 +42,7 @@ Este cuaderno implementa el análisis multivariante integrando:
    - Ranking horizontal de VIP Scores con umbral crítico (VIP ≥ 1.0).
    - Biplot de pesos PLS (w1 vs w2) con proyección de respuesta.
    - Dispersión de valores observados vs predichos.
-   - Cuadrantes epidemiológicos de impacto (Beta_PLS vs VIP).
-5. **Consolidación Editorial en PDF** (`unir_pilar_pdf`):
-   - Compilación automática de todas las tablas y figuras del pilar en un documento PDF multipágina."""
+   - Cuadrantes epidemiológicos de impacto (Beta_PLS vs VIP)."""
         },
         {
             "tipo": "markdown",
@@ -73,7 +71,6 @@ from heavystats.multivariante import (
     MultivariatePlots,
     PlsVipReport,
     DEFAULT_SURVEY_LABELS,
-    unir_pilar_pdf,
 )
 
 # Definición de rutas base y directorios de salida
@@ -225,26 +222,6 @@ fig4, ax4 = mp.plot_impact_quadrants(
 )
 fig4.savefig(GRAFICOS_DIR / "figura_04_cuadrantes_impacto_vip.pdf", dpi=300, bbox_inches="tight")
 plt.show()"""
-        },
-        {
-            "tipo": "markdown",
-            "contenido": """---
-## 6. Consolidación de Tablas e Imágenes en Documento PDF Único
-
-Integramos todas las tablas y figuras generadas en un único informe PDF multipágina."""
-        },
-        {
-            "tipo": "code",
-            "contenido": f"""pdf_multivariante = unir_pilar_pdf(
-    pilar="multivariante",
-    ruta_pdf=OUTPUT_DIR / "informe_multivariante_consolidado.pdf",
-    directorio_salidas=OUTPUT_DIR,
-    titulo="PILAR MULTIVARIANTE: MODELADO QUIMIOMÉTRICO PLS-1 Y RANKING VIP",
-    subtitulo="Determinantes de Exposición a {nombre} en Sangre (Municipio San Diego, Carabobo)",
-    autor="Br. Jose Daniel Estrada Alvarez",
-    tutor="Dr. Jose Ramon Jimenez Ochoa"
-)
-print(f"[OK] Documento consolidado generado: {{pdf_multivariante}}")"""
         }
     ]
 

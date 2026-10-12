@@ -1,4 +1,4 @@
-__version__ = "0.5.0a"
+__version__ = "0.5.1"
 
 from heavystats.validation import ValidationReport, validate_data
 from heavystats.comparation import (
@@ -124,7 +124,6 @@ from heavystats.atipicos import (
     ReporteContrasteEstratos,
     StratifiedContrastReport,
 )
-from heavystats.reporte_pdf import unir_pilar_pdf, compilar_pilar_pdf
 from heavystats.version_checker import check_for_updates
 
 # Submódulos canónicos en español y alias en inglés para máxima interoperabilidad
@@ -148,9 +147,6 @@ __all__ = [
     "bivariate",
     "multivariate",
     "outliers",
-    # Compilación editorial en PDF
-    "unir_pilar_pdf",
-    "compilar_pilar_pdf",
     # Validación y Comparación
     "ValidationReport",
     "validate_data",

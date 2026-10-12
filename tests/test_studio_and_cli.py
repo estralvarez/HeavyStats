@@ -82,7 +82,7 @@ def test_notebook_templates_generation(tmp_path, monkeypatch):
         assert "cells" in content_m
         source_m = "".join("".join(c["source"]) for c in content_m["cells"])
         assert "PlsModeler" in source_m
-        assert "unir_pilar_pdf" in source_m
+        assert "MultivariatePlots" in source_m
 
         nb_a = generar_cuaderno_atipicos_diagnostico(cfg)
         assert nb_a.exists()
@@ -90,5 +90,5 @@ def test_notebook_templates_generation(tmp_path, monkeypatch):
         assert "cells" in content_a
         source_a = "".join("".join(c["source"]) for c in content_a["cells"])
         assert "DiagnosticoAtipicos" in source_a
-        assert "unir_pilar_pdf" in source_a
+        assert "GraficosAtipicos" in source_a
 

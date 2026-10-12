@@ -55,7 +55,6 @@ from heavystats.bivariante.constants import (
     DIET_ORDINAL_MAP,
     DIET_ORDINAL_LABELS,
 )
-from heavystats.reporte_pdf import unir_pilar_pdf, compilar_pilar_pdf
 
 # Nombres canónicos en español
 GraficosBivariantes = BivariatePlots
@@ -82,10 +81,6 @@ LODS_METALES_POR_DEFECTO = DEFAULT_METAL_LODS
 PUNTOS_CORTE_METALES_POR_DEFECTO = DEFAULT_METAL_CUTOFFS
 PARES_METALES_POR_DEFECTO = DEFAULT_METAL_PAIRS
 GRUPOS_BIVARIANTES_POR_DEFECTO = DEFAULT_BIVARIATE_GROUPS
-
-# Compilador especializado de PDF para el pilar bivariante
-unir_bivariante_pdf = partial(unir_pilar_pdf, "bivariante")
-compilar_bivariante_pdf = unir_bivariante_pdf
 
 __all__ = [
     # Motor gráfico
@@ -157,10 +152,4 @@ __all__ = [
     "OMS_CADMIUM_REFERENCE_VALUE",
     "DIET_ORDINAL_MAP",
     "DIET_ORDINAL_LABELS",
-
-    # Compilación en PDF
-    "unir_pilar_pdf",
-    "compilar_pilar_pdf",
-    "unir_bivariante_pdf",
-    "compilar_bivariante_pdf",
 ]
