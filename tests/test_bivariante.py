@@ -433,6 +433,194 @@ def test_subcohort_and_radiography_plots():
     plt.close("all")
 
 
+def test_trimetal_subcohort_generality():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    np.random.seed(123)
+    n = 24
+    df_tri = pd.DataFrame({
+        "Muestra_Codificada": range(1, n + 1),
+        "Plomo_ug_dL": np.random.uniform(1.0, 6.0, n),
+        "Mercurio_ug_L": np.random.uniform(0.5, 8.0, n),
+        "Cadmio_ug_L": np.random.uniform(0.1, 2.5, n),
+        "Alim_Leguminosas": [2] * 10 + [0, 1, 3, 4] * 3 + [1, 2],
+        "Alim_Pescados": [0] * 8 + [1, 2, 3, 4] * 4,
+        "Alim_Vegetales": [2] * 9 + [1, 3, 4] * 5,
+        "Alim_Carnes": np.random.randint(0, 5, n),
+        "Salud_Fuma": ["NO", "SI"] * 12,
+        "Exposicion_Lugares_rios": [0, 1] * 12,
+    })
+
+    bp = hs.bivariate.BivariatePlots(df_tri)
+
+    metals_config = [
+        ("Plomo_ug_dL", "Alim_Leguminosas", 3.5),
+        ("Mercurio_ug_L", "Alim_Pescados", 5.0),
+        ("Cadmio_ug_L", "Alim_Vegetales", 1.0),
+    ]
+
+    for m_col, food_col, ref_val in metals_config:
+        # 1. Similarity ranking with string item_cols and all items
+        fig_sim, ax_sim, df_sim = bp.similarity_ranking_plot(target_metal=m_col)
+        assert fig_sim is not None
+        assert "Spearman_rho" in df_sim.columns
+        assert df_sim["Metal"].iloc[0] == m_col
+        plt.close(fig_sim)
+
+        # 2. Subcohort contrast with toxicological reference line
+        fig_sub, ax_sub, stats_sub = bp.subcohort_contrast_plot(
+            target_metal=m_col,
+            criterion_col=food_col,
+            show_limit=True,
+        )
+        assert fig_sub is not None
+        assert stats_sub["metal"] == m_col
+        assert stats_sub["permissible_limit"] == ref_val
+        plt.close(fig_sub)
+
+        # 3. Subcohort mosaic plot with automatic canonical criterion
+        fig_mos, axes_mos, res_mos = bp.subcohort_mosaic_plot(
+            target_metal=m_col,
+            include_shared_factors=True,
+        )
+        assert fig_mos is not None
+        assert len(axes_mos) == 3
+        assert res_mos["metal"] == m_col
+        plt.close(fig_mos)
+
+    plt.close("all")
+
+
+def test_optional_titles_subcohort():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    np.random.seed(99)
+    n = 20
+    df = pd.DataFrame({
+        "Muestra_Codificada": range(1, n + 1),
+        "Mercurio_ug_L": np.random.uniform(0.5, 4.5, n),
+        "Alim_Pescados": np.random.randint(0, 5, n),
+        "Alim_Carnes": np.random.randint(0, 5, n),
+        "Salud_Fuma": ["NO", "SI"] * 10,
+    })
+
+    bp = hs.bivariate.BivariatePlots(df)
+
+    def get_any_title(a):
+        return a.get_title(loc="left") or a.get_title(loc="center")
+
+    # 1. similarity_ranking_plot
+    # 1a. Default -> Tiene título
+    fig1, ax1, _ = bp.similarity_ranking_plot(target_metal="Mercurio_ug_L")
+    assert get_any_title(ax1) != ""
+    plt.close(fig1)
+
+    # 1b. show_title=False -> Título vacío
+    fig1_no, ax1_no, _ = bp.similarity_ranking_plot(target_metal="Mercurio_ug_L", show_title=False)
+    assert get_any_title(ax1_no) == ""
+    plt.close(fig1_no)
+
+    # 1c. title="" -> Título vacío
+    fig1_empty, ax1_empty, _ = bp.similarity_ranking_plot(target_metal="Mercurio_ug_L", title="")
+    assert get_any_title(ax1_empty) == ""
+    plt.close(fig1_empty)
+
+    # 1d. title=False -> Título vacío
+    fig1_f, ax1_f, _ = bp.similarity_ranking_plot(target_metal="Mercurio_ug_L", title=False)
+    assert get_any_title(ax1_f) == ""
+    plt.close(fig1_f)
+
+    # 1e. Custom title
+    fig1_c, ax1_c, _ = bp.similarity_ranking_plot(target_metal="Mercurio_ug_L", title="Ranking Personalizado")
+    assert get_any_title(ax1_c) == "Ranking Personalizado"
+    plt.close(fig1_c)
+
+    # 2. subcohort_contrast_plot
+    # 2a. Default -> Tiene título
+    fig2, ax2, _ = bp.subcohort_contrast_plot(target_metal="Mercurio_ug_L", criterion_col="Alim_Pescados")
+    assert get_any_title(ax2) != ""
+    plt.close(fig2)
+
+    # 2b. show_title=False -> Título vacío
+    fig2_no, ax2_no, _ = bp.subcohort_contrast_plot(target_metal="Mercurio_ug_L", criterion_col="Alim_Pescados", show_title=False)
+    assert get_any_title(ax2_no) == ""
+    plt.close(fig2_no)
+
+    # 2c. title="" -> Título vacío
+    fig2_empty, ax2_empty, _ = bp.subcohort_contrast_plot(target_metal="Mercurio_ug_L", criterion_col="Alim_Pescados", title="")
+    assert get_any_title(ax2_empty) == ""
+    plt.close(fig2_empty)
+
+    # 2d. title=False -> Título vacío
+    fig2_f, ax2_f, _ = bp.subcohort_contrast_plot(target_metal="Mercurio_ug_L", criterion_col="Alim_Pescados", title=False)
+    assert get_any_title(ax2_f) == ""
+    plt.close(fig2_f)
+
+    # 2e. Custom title
+    fig2_c, ax2_c, _ = bp.subcohort_contrast_plot(target_metal="Mercurio_ug_L", criterion_col="Alim_Pescados", title="Contraste Personalizado")
+    assert get_any_title(ax2_c) == "Contraste Personalizado"
+    plt.close(fig2_c)
+
+    # 3. shared_factors_plot
+    mask = df["Alim_Pescados"] >= 2
+    # 3a. Default -> Tiene título
+    fig3, ax3, _ = bp.shared_factors_plot(subcohort_mask=mask)
+    assert get_any_title(ax3) != ""
+    plt.close(fig3)
+
+    # 3b. show_title=False -> Título vacío
+    fig3_no, ax3_no, _ = bp.shared_factors_plot(subcohort_mask=mask, show_title=False)
+    assert get_any_title(ax3_no) == ""
+    plt.close(fig3_no)
+
+    # 3c. title="" -> Título vacío
+    fig3_empty, ax3_empty, _ = bp.shared_factors_plot(subcohort_mask=mask, title="")
+    assert get_any_title(ax3_empty) == ""
+    plt.close(fig3_empty)
+
+    # 3d. Custom title
+    fig3_c, ax3_c, _ = bp.shared_factors_plot(subcohort_mask=mask, title="Factores de Riesgo")
+    assert get_any_title(ax3_c) == "Factores de Riesgo"
+    plt.close(fig3_c)
+
+    # 4. subcohort_mosaic_plot
+    # 4a. Default -> Todos los paneles tienen título
+    fig4, axes4, _ = bp.subcohort_mosaic_plot(target_metal="Mercurio_ug_L", criterion_col="Alim_Pescados")
+    for ax in axes4.values():
+        assert get_any_title(ax) != ""
+    plt.close(fig4)
+
+    # 4b. show_titles=False -> Paneles sin título
+    fig4_no, axes4_no, _ = bp.subcohort_mosaic_plot(target_metal="Mercurio_ug_L", criterion_col="Alim_Pescados", show_titles=False)
+    for ax in axes4_no.values():
+        assert get_any_title(ax) == ""
+    plt.close(fig4_no)
+
+    # 4c. title="" -> Paneles sin título
+    fig4_empty, axes4_empty, _ = bp.subcohort_mosaic_plot(target_metal="Mercurio_ug_L", criterion_col="Alim_Pescados", title="")
+    for ax in axes4_empty.values():
+        assert get_any_title(ax) == ""
+    plt.close(fig4_empty)
+
+    # 4d. Suptitle y personalización individual de paneles
+    fig4_sup, axes4_sup, _ = bp.subcohort_mosaic_plot(
+        target_metal="Mercurio_ug_L",
+        criterion_col="Alim_Pescados",
+        title="Mosaico de Mercurio",
+        title_contrast="Panel B Personalizado",
+    )
+    assert fig4_sup._suptitle is not None and fig4_sup._suptitle.get_text() == "Mosaico de Mercurio"
+    assert get_any_title(axes4_sup["ax_contrast"]) == "Panel B Personalizado"
+    plt.close(fig4_sup)
+
+    plt.close("all")
+
+
+
 
 
 

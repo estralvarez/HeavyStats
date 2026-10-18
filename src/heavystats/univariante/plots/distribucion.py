@@ -526,9 +526,11 @@ class DistribucionPlots:
         ylabel: Optional[str] = None,
         figsize: Tuple[float, float] = (6.0, 5.5),
         ax: Optional[plt.Axes] = None,
+        title: Optional[str] = None,
         save_dir: Optional[str] = None,
         save_format: Union[str, Sequence[str]] = "png",
         dpi: int = 300,
+        bold: bool = True,
         close_after_save: bool = False,
         bold_annotations: bool = True,
         **kwargs: Any,
@@ -562,6 +564,12 @@ class DistribucionPlots:
             var_label = ylabel if ylabel is not None else self.get_label(col, labels_map)
             draw_qq(target_ax, data_clean, dot_color, active_line_color, var_label, bold=bold_annotations)
             self._style_axis(target_ax, tick_length=4.5, bold=bold_annotations)
+
+            axis_color = "#0f172a" if bold else "#222222"
+            font_weight = "bold" if bold else "normal"
+
+            if title is not None:
+                target_ax.set_title(title, fontsize=12.0, fontweight=font_weight, pad=10, color=axis_color)
 
             if bold_annotations:
                 for tick in target_ax.get_yticklabels():

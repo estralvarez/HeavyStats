@@ -111,19 +111,82 @@ class UnivariateOutlierReport(BaseReport):
 
     def to_dataframe(self) -> pd.DataFrame:
         data = [
-            {"Categoría": "Estadísticos Paramétricos", "Parámetro": "Media ± Desviación Estándar", "Valor": f"{self.mean:.4f} ± {self.std:.4f}", "Unidad": "µg/L", "Criterio / Límite": f"IC 95%: [{self.ci_lower:.4f}, {self.ci_upper:.4f}]"},
-            {"Categoría": "Estadísticos No Paramétricos", "Parámetro": "Mediana (Rango Intercuartílico)", "Valor": f"{self.median:.4f} ({self.q25:.4f} - {self.q75:.4f})", "Unidad": "µg/L", "Criterio / Límite": f"IQR = {self.iqr:.4f}"},
-            {"Categoría": "Estadísticos No Paramétricos", "Parámetro": "Rango Muestral (Mín - Máx)", "Valor": f"{self.min_val:.4f} - {self.max_val:.4f}", "Unidad": "µg/L", "Criterio / Límite": "Observaciones extremas"},
-            {"Categoría": "Detección de Atípicos (Tukey)", "Parámetro": "Vallas de Tukey (1.5 × IQR)", "Valor": f"[{self.tukey_lower:.4f}, {self.tukey_upper:.4f}]", "Unidad": "µg/L", "Criterio / Límite": f"Máx ({self.max_val:.2f}) < Valla Sup. ({self.tukey_upper:.2f})"},
-            {"Categoría": "Detección de Atípicos (Grubbs)", "Parámetro": "Test de Grubbs Máximo (G_calc)", "Valor": f"G = {self.g_max:.4f}", "Unidad": "Adimensional", "Criterio / Límite": f"G_crit (α=0.05) = {self.g_crit:.4f} ({'Rechaza H0' if self.g_max >= self.g_crit else 'No Rechaza H0'})"},
-            {"Categoría": "Detección de Atípicos (Grubbs)", "Parámetro": "Test de Grubbs Mínimo (G_calc)", "Valor": f"G = {self.g_min:.4f}", "Unidad": "Adimensional", "Criterio / Límite": f"G_crit (α=0.05) = {self.g_crit:.4f} ({'Rechaza H0' if self.g_min >= self.g_crit else 'No Rechaza H0'})"},
+            {
+                "Categoría": "Estadísticos Paramétricos",
+                "Parámetro": "Media ± Desviación Estándar",
+                "Método": "Paramétrico (Distribución Normal)",
+                "Valor": f"{self.mean:.2f} ± {self.std:.2f}",
+                "Unidad": "µg/L",
+                "Criterio / Límite": f"IC 95%: [{self.ci_lower:.2f}, {self.ci_upper:.2f}]",
+            },
+            {
+                "Categoría": "Estadísticos No Paramétricos",
+                "Parámetro": "Mediana (Rango Intercuartílico)",
+                "Método": "No Paramétrico (Robusto)",
+                "Valor": f"{self.median:.2f} ({self.iqr:.2f})",
+                "Unidad": "µg/L",
+                "Criterio / Límite": f"Q1 = {self.q25:.2f}, Q3 = {self.q75:.2f}",
+            },
+            {
+                "Categoría": "Estadísticos No Paramétricos",
+                "Parámetro": "Rango Muestral (Mín - Máx)",
+                "Método": "No Paramétrico (Extremos)",
+                "Valor": f"{self.min_val:.2f} - {self.max_val:.2f}",
+                "Unidad": "µg/L",
+                "Criterio / Límite": "Observaciones empíricas mín/máx",
+            },
+            {
+                "Categoría": "Detección de Atípicos",
+                "Parámetro": "Vallas de Tukey (1.5 × IQR)",
+                "Método": "No Paramétrico (Vallas de Tukey)",
+                "Valor": f"[{self.tukey_lower:.2f}, {self.tukey_upper:.2f}]",
+                "Unidad": "µg/L",
+                "Criterio / Límite": f"Valla Sup. = {self.tukey_upper:.2f} (Máx: {self.max_val:.2f})",
+            },
+            {
+                "Categoría": "Detección de Atípicos",
+                "Parámetro": "Test de Grubbs Máximo (G_calc)",
+                "Método": "Paramétrico (Test de Grubbs bilateral)",
+                "Valor": f"G = {self.g_max:.3f}",
+                "Unidad": "Adimensional",
+                "Criterio / Límite": f"G_crit (alpha={self.alpha:.2f}) = {self.g_crit:.3f} ({'Atípico detectado' if self.g_max >= self.g_crit else 'Conforme (Sin atípicos)'})",
+            },
+            {
+                "Categoría": "Detección de Atípicos",
+                "Parámetro": "Test de Grubbs Mínimo (G_calc)",
+                "Método": "Paramétrico (Test de Grubbs bilateral)",
+                "Valor": f"G = {self.g_min:.3f}",
+                "Unidad": "Adimensional",
+                "Criterio / Límite": f"G_crit (alpha={self.alpha:.2f}) = {self.g_crit:.3f} ({'Atípico detectado' if self.g_min >= self.g_crit else 'Conforme (Sin atípicos)'})",
+            },
         ]
         if self.who_threshold:
-            data.append({"Categoría": "Guías Toxicológicas", "Parámetro": "Umbral OMS Población No Expuesta", "Valor": f"{self.who_threshold:.2f}", "Unidad": "µg/L", "Criterio / Límite": f"Superan: {self.excede_who} / {self.n_obs}"})
+            data.append({
+                "Categoría": "Guías Toxicológicas",
+                "Parámetro": "Umbral OMS Población No Expuesta",
+                "Método": "Normativa Internacional (OMS)",
+                "Valor": f"{self.who_threshold:.2f}",
+                "Unidad": "µg/L",
+                "Criterio / Límite": f"Superan: {self.excede_who} / {self.n_obs} ({self.excede_who/self.n_obs*100:.1f}%)" if self.n_obs else "---",
+            })
         if self.epa_threshold:
-            data.append({"Categoría": "Guías Toxicológicas", "Parámetro": "Dosis de Referencia Guía US EPA", "Valor": f"{self.epa_threshold:.2f}", "Unidad": "µg/L", "Criterio / Límite": f"Superan: {self.excede_epa} / {self.n_obs}"})
+            data.append({
+                "Categoría": "Guías Toxicológicas",
+                "Parámetro": "Dosis de Referencia Guía US EPA",
+                "Método": "Normativa Internacional (US EPA)",
+                "Valor": f"{self.epa_threshold:.2f}",
+                "Unidad": "µg/L",
+                "Criterio / Límite": f"Superan: {self.excede_epa} / {self.n_obs} ({self.excede_epa/self.n_obs*100:.1f}%)" if self.n_obs else "---",
+            })
         if self.cdc_threshold:
-            data.append({"Categoría": "Guías Toxicológicas", "Parámetro": "Nivel de Referencia CDC", "Valor": f"{self.cdc_threshold:.2f}", "Unidad": "µg/dL", "Criterio / Límite": f"Superan: {self.excede_cdc} / {self.n_obs}"})
+            data.append({
+                "Categoría": "Guías Toxicológicas",
+                "Parámetro": "Nivel de Referencia CDC",
+                "Método": "Normativa Internacional (CDC)",
+                "Valor": f"{self.cdc_threshold:.2f}",
+                "Unidad": "µg/dL",
+                "Criterio / Límite": f"Superan: {self.excede_cdc} / {self.n_obs} ({self.excede_cdc/self.n_obs*100:.1f}%)" if self.n_obs else "---",
+            })
         return pd.DataFrame(data)
 
     def to_html(self, filepath: Optional[str] = None, full_page: bool = False) -> str:
@@ -131,18 +194,18 @@ class UnivariateOutlierReport(BaseReport):
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 20px;">
           <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; border-left: 4px solid #0284c7;">
             <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Media ± Desv. Estándar</div>
-            <div style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px;">{self.mean:.3f} ± {self.std:.3f}</div>
+            <div style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px;">{self.mean:.2f} ± {self.std:.2f} µg/L</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">IC 95%: [{self.ci_lower:.2f}, {self.ci_upper:.2f}]</div>
           </div>
           <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; border-left: 4px solid #3b82f6;">
             <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Mediana (IQR)</div>
-            <div style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px;">{self.median:.3f} ({self.iqr:.3f})</div>
+            <div style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px;">{self.median:.2f} ({self.iqr:.2f}) µg/L</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Q1: {self.q25:.2f} | Q3: {self.q75:.2f}</div>
           </div>
           <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; border-left: 4px solid #8b5cf6;">
             <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Valla Superior Tukey</div>
-            <div style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px;">{self.tukey_upper:.3f} µg/L</div>
-            <div style="font-size: 11px; color: #16a34a; margin-top: 2px;">Máx: {self.max_val:.2f} (Conforme)</div>
+            <div style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px;">{self.tukey_upper:.2f} µg/L</div>
+            <div style="font-size: 11px; color: {'#16a34a' if self.max_val <= self.tukey_upper else '#dc2626'}; margin-top: 2px;">Máx: {self.max_val:.2f} ({'Conforme' if self.max_val <= self.tukey_upper else 'Atípico'})</div>
           </div>
           <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; border-left: 4px solid #10b981;">
             <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Test de Grubbs</div>
@@ -151,15 +214,32 @@ class UnivariateOutlierReport(BaseReport):
           </div>
         </div>
         """
-        table_html = render_html_table(df=self.to_dataframe(), full_page=False)
+        spanners = [
+            {"label": "Clasificación y Metodología", "columns": ["Categoría", "Parámetro", "Método"]},
+            {"label": "Resultado Numérico", "columns": ["Valor", "Unidad"]},
+            {"label": "Criterio de Decisión / Umbral", "columns": ["Criterio / Límite"]},
+        ]
+        table_html = render_html_table(
+            df=self.to_dataframe(),
+            column_alignments={
+                "Categoría": "l",
+                "Parámetro": "l",
+                "Método": "l",
+                "Valor": "r",
+                "Unidad": "c",
+                "Criterio / Límite": "l",
+            },
+            spanners=spanners,
+            full_page=False,
+        )
         inner = kpi_html + table_html
         wrapped = wrap_html_container(
             inner_html=inner,
             title=self.title,
             subtitle=self.subtitle,
             notes=[
-                f"Determinaciones analíticas por Espectrometría de Absorción Atómica con Horno de Grafito (GFAAS).",
-                f"Límites de Tukey evaluados a 1.5 × IQR. Test de Grubbs evaluado a dos colas con significancia α = {self.alpha}."
+                "Determinaciones instrumentales cuantitativas por Espectrometría de Absorción Atómica con Horno de Grafito (GFAAS).",
+                f"Vallas de Tukey evaluadas a 1.5 × IQR. Test de Grubbs evaluado a dos colas con significancia crítica α = {self.alpha}."
             ],
             full_page=full_page
         )
@@ -171,7 +251,7 @@ class UnivariateOutlierReport(BaseReport):
 class OutlierDiagnosticReport(BaseReport):
     """
     Reporte quimiométrico multivariante de apalancamiento, residuos y valores atípicos.
-    Exporta a HTML interactivo, CSV y JSON estructurado.
+    Exporta a HTML interactivo de calidad editorial, CSV y JSON estructurado.
     """
 
     def __init__(
@@ -205,7 +285,6 @@ class OutlierDiagnosticReport(BaseReport):
         self.title = title
         self.subtitle = subtitle or f"Evaluación de influencia en espacio latente PLS-1 para {self.target_name} (N = {self.n_obs})"
 
-
         if filepath_html:
             self.to_html(filepath_html)
         if filepath_csv:
@@ -214,18 +293,165 @@ class OutlierDiagnosticReport(BaseReport):
             self.to_json(filepath_json)
 
     def to_dataframe(self) -> pd.DataFrame:
+        """Retorna el DataFrame de diagnóstico con columnas originales y precisión estandarizada."""
         return self._df.copy()
 
     def to_html(self, filepath: Optional[str] = None, full_page: bool = False) -> str:
-        table_html = render_html_table(df=self._df, full_page=False)
+        """
+        Genera una tabla HTML editorial de alta calidad con encabezados formalizados,
+        agrupadores (spanners), redondeo analítico riguroso y distintivos (badges) que
+        resaltan de forma inequívoca las observaciones atípicas e influyentes.
+        """
+        df = self._df.copy()
+
+        # KPIs superiores
+        n_flagged = len(df[df["Diagnostico"] != "Homogéneo"]) if "Diagnostico" in df.columns else 0
+        n_high_lev = len(df[df["Leverage"] > self.leverage_limit]) if "Leverage" in df.columns and self.leverage_limit > 0 else 0
+        n_cook = len(df[df["Cooks_D"] > self.cooks_threshold]) if "Cooks_D" in df.columns and self.cooks_threshold > 0 else 0
+        n_t2 = len(df[df["Hotelling_T2"] > self.T2_limit]) if "Hotelling_T2" in df.columns and self.T2_limit > 0 else 0
+
+        kpi_html = f"""
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 20px;">
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 14px; border-left: 4px solid #0284c7;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Apalancamiento Crítico (h*)</div>
+            <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 3px;">2p/n = {self.leverage_limit:.3f}</div>
+            <div style="font-size: 11px; color: {'#16a34a' if n_high_lev == 0 else '#b45309'}; margin-top: 2px;">{n_high_lev} muestra(s) superan límite</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 14px; border-left: 4px solid #d97706;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Umbral Distancia Cook (D*)</div>
+            <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 3px;">4/n = {self.cooks_threshold:.3f}</div>
+            <div style="font-size: 11px; color: {'#16a34a' if n_cook == 0 else '#b91c1c'}; margin-top: 2px;">{n_cook} observación(es) influyentes</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 14px; border-left: 4px solid #8b5cf6;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Límite Hotelling T² (F_95%)</div>
+            <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 3px;">T²_lim = {self.T2_limit:.2f}</div>
+            <div style="font-size: 11px; color: {'#16a34a' if n_t2 == 0 else '#b91c1c'}; margin-top: 2px;">{n_t2} fuera de elipse 95%</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 14px; border-left: 4px solid {'#10b981' if n_flagged == 0 else '#ef4444'};">
+            <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Diagnóstico Integral</div>
+            <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 3px;">{self.n_obs - n_flagged} / {self.n_obs} Conformes</div>
+            <div style="font-size: 11px; color: {'#16a34a' if n_flagged == 0 else '#b91c1c'}; margin-top: 2px;">{n_flagged} caso(s) diferenciado(s)</div>
+          </div>
+        </div>
+        """
+
+        # Construcción manual de la tabla para lograr estilo editorial y badges de colores
+        table_html = []
+        table_html.append("<table class='hs-pub-table' style='width: 100%; font-size: 13px;'>")
+        table_html.append("  <thead>")
+        
+        # Fila de Spanners Superiores
+        table_html.append("    <tr style='background: #f8fafc;'>")
+        table_html.append("      <th colspan='2' class='hs-center-col' style='border-bottom: 2px solid #0f172a; font-weight: 700; color: #0f172a;'>Sujeto y Biomarcador</th>")
+        table_html.append("      <th colspan='3' class='hs-center-col' style='border-bottom: 2px solid #0f172a; font-weight: 700; color: #0f172a;'>Detección Univariante</th>")
+        table_html.append("      <th colspan='2' class='hs-center-col' style='border-bottom: 2px solid #0f172a; font-weight: 700; color: #0f172a;'>Espacio Latente (PLS-1)</th>")
+        table_html.append("      <th colspan='5' class='hs-center-col' style='border-bottom: 2px solid #0f172a; font-weight: 700; color: #0f172a;'>Influencia Multivariante y Residuos</th>")
+        table_html.append("      <th class='hs-center-col' style='border-bottom: 2px solid #0f172a; font-weight: 700; color: #0f172a;'>Clasificación</th>")
+        table_html.append("    </tr>")
+
+        # Fila de Encabezados de Columna
+        table_html.append("    <tr>")
+        table_html.append("      <th class='hs-center-col'>ID Muestra</th>")
+        table_html.append("      <th class='hs-num-col'>Conc. [µg/L]</th>")
+        table_html.append("      <th class='hs-num-col'>Z-Score</th>")
+        table_html.append("      <th class='hs-num-col'>Z-Modif.</th>")
+        table_html.append("      <th class='hs-center-col'>Valla Tukey</th>")
+        table_html.append("      <th class='hs-num-col'>Puntuación t₁</th>")
+        table_html.append("      <th class='hs-num-col'>Puntuación t₂</th>")
+        table_html.append("      <th class='hs-num-col'>Hotelling T²</th>")
+        table_html.append("      <th class='hs-num-col'>Residuo Q</th>")
+        table_html.append("      <th class='hs-num-col'>Leverage (hᵢᵢ)</th>")
+        table_html.append("      <th class='hs-num-col'>Dist. Cook (Dᵢ)</th>")
+        table_html.append("      <th class='hs-num-col'>Res. Estudent.</th>")
+        table_html.append("      <th class='hs-center-col'>Diagnóstico Quimiométrico</th>")
+        table_html.append("    </tr>")
+        table_html.append("  </thead>")
+        table_html.append("  <tbody>")
+
+        for _, row in df.iterrows():
+            sid = str(row.get("Muestra", ""))
+            y_conc = float(row.get("Concentracion", 0.0))
+            z_val = float(row.get("Z_Score", 0.0))
+            mod_z = float(row.get("Modified_Z", 0.0))
+            tukey = str(row.get("Tukey_Outlier", "Normal"))
+            t1 = float(row.get("T1_Score", 0.0))
+            t2 = float(row.get("T2_Score", 0.0))
+            t2_hot = float(row.get("Hotelling_T2", 0.0))
+            q_res = float(row.get("Q_Residual", 0.0))
+            lev = float(row.get("Leverage", 0.0))
+            ck = float(row.get("Cooks_D", 0.0))
+            r_stud = float(row.get("Residual_Estudentizado", 0.0))
+            diag_txt = str(row.get("Diagnostico", "Homogéneo"))
+
+            # Determinar estilo de fila según severidad de atipicidad
+            row_style = ""
+            if diag_txt == "Punto Palanca Extremo":
+                row_style = " style='background-color: #fef2f2 !important;'"
+            elif diag_txt in ("Alto Apalancamiento", "Observación Influyente"):
+                row_style = " style='background-color: #fffbeb !important;'"
+            elif diag_txt == "Atípico Multivariante T²":
+                row_style = " style='background-color: #fdf2f8 !important;'"
+
+            # Formatear celdas con resaltado si exceden umbral
+            # Hotelling T2
+            t2_style = "font-weight: 700; color: #b91c1c;" if (self.T2_limit > 0 and t2_hot > self.T2_limit) else ""
+            t2_cell = f"<span style='{t2_style}'>{t2_hot:.2f}{'*' if t2_style else ''}</span>"
+
+            # Leverage
+            lev_style = "font-weight: 700; color: #b45309;" if (self.leverage_limit > 0 and lev > self.leverage_limit) else ""
+            lev_cell = f"<span style='{lev_style}'>{lev:.3f}{'*' if lev_style else ''}</span>"
+
+            # Cook's D
+            ck_style = "font-weight: 700; color: #b91c1c;" if (self.cooks_threshold > 0 and ck > self.cooks_threshold) else ""
+            ck_cell = f"<span style='{ck_style}'>{ck:.3f}{'*' if ck_style else ''}</span>"
+
+            # Badge Tukey
+            if "Atípico" in tukey:
+                tukey_badge = "<span class='hs-badge-danger'>Atípico</span>"
+            else:
+                tukey_badge = "<span class='hs-badge-ok'>Normal</span>"
+
+            # Badge Diagnóstico
+            if diag_txt == "Punto Palanca Extremo":
+                diag_badge = "<span class='hs-badge-danger' style='font-size: 11px;'>Punto Palanca Extremo</span>"
+            elif diag_txt == "Alto Apalancamiento":
+                diag_badge = "<span class='hs-badge-warn' style='font-size: 11px;'>Alto Apalancamiento</span>"
+            elif diag_txt == "Observación Influyente":
+                diag_badge = "<span class='hs-badge-warn' style='background-color: #ffedd5 !important; color: #c2410c !important; border-color: #fed7aa; font-size: 11px;'>Observación Influyente</span>"
+            elif diag_txt == "Atípico Multivariante T²":
+                diag_badge = "<span class='hs-badge-danger' style='background-color: #fce7f3 !important; color: #9d174d !important; border-color: #fbcfe8; font-size: 11px;'>Atípico T²</span>"
+            else:
+                diag_badge = "<span class='hs-badge-ok' style='font-size: 11px;'>Homogéneo</span>"
+
+            table_html.append(f"    <tr{row_style}>")
+            table_html.append(f"      <td class='hs-center-col' style='font-weight: 600;'>{sid}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{y_conc:.2f}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{z_val:+.2f}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{mod_z:+.2f}</td>")
+            table_html.append(f"      <td class='hs-center-col'>{tukey_badge}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{t1:+.2f}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{t2:+.2f}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{t2_cell}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{q_res:.2f}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{lev_cell}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{ck_cell}</td>")
+            table_html.append(f"      <td class='hs-num-col'>{r_stud:+.2f}</td>")
+            table_html.append(f"      <td class='hs-center-col'>{diag_badge}</td>")
+            table_html.append("    </tr>")
+
+        table_html.append("  </tbody>")
+        table_html.append("</table>")
+
+        inner = kpi_html + "\n".join(table_html)
         wrapped = wrap_html_container(
-            inner_html=table_html,
+            inner_html=inner,
             title=self.title,
             subtitle=self.subtitle,
             notes=[
-                f"Hotelling T² evaluado con distribución F de Snedecor al 95% de confianza (Límite = {self.T2_limit:.3f}).",
-                f"Límite de apalancamiento crítico: h* = 2p/n = {self.leverage_limit:.3f}.",
-                f"Umbral de distancia de Cook: Di > 4/n = {self.cooks_threshold:.3f}."
+                f"Hotelling T² evaluado con distribución F de Snedecor al 95% de confianza (Límite crítico = {self.T2_limit:.2f}).",
+                f"Límite de apalancamiento crítico: h* = 2p/n = {self.leverage_limit:.3f}. Valores con asterisco (*) superan el umbral.",
+                f"Umbral de distancia de Cook: D* = 4/n = {self.cooks_threshold:.3f}. Valores con asterisco (*) indican influencia sobre el modelo.",
+                "Los sujetos clasificados como no homogéneos representan variabilidad sociodemográfica genuina y deben retenerse en el análisis."
             ],
             full_page=full_page
         )

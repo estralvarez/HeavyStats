@@ -52,9 +52,7 @@ class OutlierPlots:
         )
 
         # 1. Boxplot Superior
-        bp = ax_box.boxplot(
-            y,
-            vert=False,
+        box_kwargs = dict(
             patch_artist=True,
             boxprops=dict(facecolor="#bae6fd", color="#0284c7", linewidth=1.5),
             whiskerprops=dict(color="#0284c7", linewidth=1.5, linestyle="--"),
@@ -62,6 +60,10 @@ class OutlierPlots:
             medianprops=dict(color="#0369a1", linewidth=2.0),
             showfliers=False,
         )
+        try:
+            bp = ax_box.boxplot(y, orientation="horizontal", **box_kwargs)
+        except TypeError:
+            bp = ax_box.boxplot(y, vert=False, **box_kwargs)
         sns.stripplot(
             x=y,
             ax=ax_box,
@@ -107,6 +109,20 @@ class OutlierPlots:
         self._save_fig(fig, filepath)
         return fig, (ax_box, ax_dist)
 
+    def _get_target_label(self, metal_label: Optional[str] = None) -> str:
+        if metal_label:
+            return metal_label
+        tc = self.diag.target_col
+        tc_lower = tc.lower()
+        if "mercurio" in tc_lower or "hg" in tc_lower:
+            return r"[$\mathrm{Hg}$] Plasmático ($\mu\mathrm{g/L}$)"
+        elif "plomo" in tc_lower or "pb" in tc_lower:
+            return r"[$\mathrm{Pb}$] Sanguíneo ($\mu\mathrm{g/dL}$)"
+        elif "cadmio" in tc_lower or "cd" in tc_lower:
+            return r"[$\mathrm{Cd}$] Sanguíneo ($\mu\mathrm{g/L}$)"
+        clean = tc.replace("_ug_L", "").replace("_ug_dL", "").replace("_", " ")
+        return f"[{clean}] (µg/L)"
+
     def plot_latent_scores(
         self,
         figsize: Tuple[float, float] = (7.0, 5.5),
@@ -120,7 +136,8 @@ class OutlierPlots:
 
         fig, ax = plt.subplots(figsize=figsize)
         T = self.diag.scores_T
-        t1, t2 = T[:, 0], T[:, 1] if self.diag.k_comp > 1 else np.zeros_like(t1)
+        t1 = T[:, 0]
+        t2 = T[:, 1] if self.diag.k_comp > 1 else np.zeros_like(t1)
 
         # Dispersión con color según concentración
         sc = ax.scatter(
@@ -134,29 +151,41 @@ class OutlierPlots:
             zorder=4
         )
         cbar = plt.colorbar(sc, ax=ax, pad=0.02)
-        cbar.set_label(f"[{self.diag.target_col}] (µg/L)", fontsize=9.5, fontweight="bold")
+        cbar.set_label(self._get_target_label(), fontsize=9.5, fontweight="bold")
+
+        # Headroom en ejes
+        max_t1, min_t1 = float(np.max(t1)), float(np.min(t1))
+        span_t1 = max(1.0, max_t1 - min_t1)
+        ax.set_xlim(min_t1 - span_t1 * 0.12, max_t1 + span_t1 * 0.12)
+
+        if self.diag.k_comp > 1:
+            max_t2, min_t2 = float(np.max(t2)), float(np.min(t2))
+            span_t2 = max(1.0, max_t2 - min_t2)
+            ax.set_ylim(min_t2 - span_t2 * 0.12, max_t2 + span_t2 * 0.12)
 
         # Identificar y etiquetar atípicos o casos influyentes
         t2_out = self.diag.T2_Hotelling > self.diag.T2_limit
         for i, sid in enumerate(self.diag.ids):
             if t2_out[i] or (self.diag.cooks_D[i] > self.diag.cooks_threshold):
+                x_off = -22 if t1[i] > max_t1 - span_t1 * 0.25 else 7
+                y_off = -16 if (self.diag.k_comp > 1 and t2[i] > max_t2 - span_t2 * 0.25) else 7
                 ax.annotate(
                     sid,
                     (t1[i], t2[i]),
-                    xytext=(6, 6),
+                    xytext=(x_off, y_off),
                     textcoords="offset points",
                     fontsize=8.5,
                     fontweight="bold",
                     color="#b91c1c",
-                    bbox=dict(boxstyle="round,pad=0.2", facecolor="#fee2e2", edgecolor="#ef4444", alpha=0.9),
+                    bbox=dict(boxstyle="round,pad=0.25", facecolor="#fee2e2", edgecolor="#ef4444", alpha=0.92),
                     zorder=5
                 )
 
         ax.axhline(0, color="#64748b", linestyle=":", linewidth=1.0)
         ax.axvline(0, color="#64748b", linestyle=":", linewidth=1.0)
-        ax.set_xlabel("Puntuación Latente 1 (t₁)", fontsize=10, fontweight="bold")
-        ax.set_ylabel("Puntuación Latente 2 (t₂)", fontsize=10, fontweight="bold")
-        ax.set_title("Espacio Latente PLS-1: Puntuaciones (t₁ vs t₂)", fontsize=11, fontweight="bold")
+        ax.set_xlabel(r"Puntuación Latente 1 ($t_1$)", fontsize=10, fontweight="bold")
+        ax.set_ylabel(r"Puntuación Latente 2 ($t_2$)", fontsize=10, fontweight="bold")
+        ax.set_title(r"Espacio Latente PLS-1: Puntuaciones ($t_1$ vs $t_2$)", fontsize=11, fontweight="bold")
         ax.grid(True, linestyle=":", alpha=0.5)
         sns.despine(ax=ax)
 
@@ -188,30 +217,40 @@ class OutlierPlots:
             zorder=4
         )
         cbar = plt.colorbar(sc, ax=ax, pad=0.02)
-        cbar.set_label(f"[{self.diag.target_col}] (µg/L)", fontsize=9.5, fontweight="bold")
+        cbar.set_label(self._get_target_label(), fontsize=9.5, fontweight="bold")
 
-        ax.axvline(self.diag.T2_limit, color="#b91c1c", linestyle="--", linewidth=1.5, label=f"Límite T² 95% ({self.diag.T2_limit:.2f})")
-        ax.axhline(self.diag.Q_limit, color="#d97706", linestyle="--", linewidth=1.5, label=f"Límite Q 95% ({self.diag.Q_limit:.2f})")
+        ax.axvline(self.diag.T2_limit, color="#b91c1c", linestyle="--", linewidth=1.5, label=rf"Límite Hotelling $T^2$ 95% ({self.diag.T2_limit:.2f})")
+        ax.axhline(self.diag.Q_limit, color="#d97706", linestyle="--", linewidth=1.5, label=rf"Límite Residual $Q$ 95% ({self.diag.Q_limit:.2f})")
 
-        # Etiquetar muestras en cuadrantes atípicos
+        # Headroom en ejes
+        max_t2 = max(float(np.max(self.diag.T2_Hotelling)), self.diag.T2_limit)
+        max_q = max(float(np.max(self.diag.Q_residuals)), self.diag.Q_limit)
+        ax.set_xlim(-0.02 * max_t2, max_t2 * 1.18)
+        ax.set_ylim(-0.02 * max_q, max_q * 1.20)
+
+        # Etiquetar muestras en cuadrantes atípicos con offsets inteligentes
         for i, sid in enumerate(self.diag.ids):
-            if self.diag.T2_Hotelling[i] > self.diag.T2_limit or self.diag.Q_residuals[i] > self.diag.Q_limit:
+            t2_val = self.diag.T2_Hotelling[i]
+            q_val = self.diag.Q_residuals[i]
+            if t2_val > self.diag.T2_limit or q_val > self.diag.Q_limit:
+                x_off = -24 if t2_val > max_t2 * 0.75 else 7
+                y_off = -18 if q_val > max_q * 0.75 else 7
                 ax.annotate(
                     sid,
-                    (self.diag.T2_Hotelling[i], self.diag.Q_residuals[i]),
-                    xytext=(6, 6),
+                    (t2_val, q_val),
+                    xytext=(x_off, y_off),
                     textcoords="offset points",
                     fontsize=8.5,
                     fontweight="bold",
                     color="#b91c1c",
-                    bbox=dict(boxstyle="round,pad=0.2", facecolor="#fee2e2", edgecolor="#ef4444", alpha=0.9),
+                    bbox=dict(boxstyle="round,pad=0.25", facecolor="#fee2e2", edgecolor="#ef4444", alpha=0.92),
                     zorder=5
                 )
 
-        ax.set_xlabel("Distancia de Hotelling T²", fontsize=10, fontweight="bold")
-        ax.set_ylabel("Residuales Q en Predictores (SPE)", fontsize=10, fontweight="bold")
-        ax.set_title("Diagrama de Influencia Quimiométrica (T² vs Q)", fontsize=11, fontweight="bold")
-        ax.legend(loc="upper right", fontsize=8.5, frameon=True)
+        ax.set_xlabel(r"Distancia de Hotelling $T^2$", fontsize=10, fontweight="bold")
+        ax.set_ylabel(r"Residuales $Q$ en Predictores ($\mathrm{SPE}$)", fontsize=10, fontweight="bold")
+        ax.set_title(r"Diagrama de Influencia Quimiométrica ($T^2$ vs $Q$)", fontsize=11, fontweight="bold")
+        ax.legend(loc="upper left", fontsize=8.5, frameon=True, framealpha=0.92, facecolor="#ffffff", edgecolor="#cbd5e1")
         ax.grid(True, linestyle=":", alpha=0.5)
         sns.despine(ax=ax)
 
@@ -243,29 +282,52 @@ class OutlierPlots:
             zorder=4
         )
         cbar = plt.colorbar(sc, ax=ax, pad=0.02)
-        cbar.set_label(f"[{self.diag.target_col}] (µg/L)", fontsize=9.5, fontweight="bold")
+        cbar.set_label(self._get_target_label(), fontsize=9.5, fontweight="bold")
 
-        ax.axvline(self.diag.leverage_limit, color="#d97706", linestyle="--", linewidth=1.5, label=f"Límite Leverage 2p/n ({self.diag.leverage_limit:.2f})")
-        ax.axhline(self.diag.cooks_threshold, color="#b91c1c", linestyle="--", linewidth=1.5, label=f"Umbral Cook ({self.diag.cooks_threshold:.2f})")
+        ax.axvline(
+            self.diag.leverage_limit,
+            color="#d97706",
+            linestyle="--",
+            linewidth=1.5,
+            label=rf"Límite Apalancamiento $h^* = 2p/n$ ({self.diag.leverage_limit:.2f})"
+        )
+        ax.axhline(
+            self.diag.cooks_threshold,
+            color="#b91c1c",
+            linestyle="--",
+            linewidth=1.5,
+            label=rf"Umbral Influencia Cook $D^* = 4/n$ ({self.diag.cooks_threshold:.2f})"
+        )
+
+        # Headroom para evitar colisión de puntos extremos con bordes y leyenda
+        max_lev = max(float(np.max(self.diag.leverage)), self.diag.leverage_limit)
+        max_cook = max(float(np.max(self.diag.cooks_D)), self.diag.cooks_threshold)
+        ax.set_xlim(-0.015, max_lev * 1.18)
+        ax.set_ylim(-0.015, max_cook * 1.20)
 
         for i, sid in enumerate(self.diag.ids):
-            if (self.diag.leverage[i] > self.diag.leverage_limit) or (self.diag.cooks_D[i] > self.diag.cooks_threshold):
+            lev_i = self.diag.leverage[i]
+            ck_i = self.diag.cooks_D[i]
+            if (lev_i > self.diag.leverage_limit) or (ck_i > self.diag.cooks_threshold):
+                # Desplazar hacia la izquierda/abajo si el punto está cerca del extremo superior o derecho
+                x_off = -24 if lev_i > max_lev * 0.75 else 7
+                y_off = -18 if ck_i > max_cook * 0.75 else 7
                 ax.annotate(
                     sid,
-                    (self.diag.leverage[i], self.diag.cooks_D[i]),
-                    xytext=(6, 6),
+                    (lev_i, ck_i),
+                    xytext=(x_off, y_off),
                     textcoords="offset points",
                     fontsize=8.5,
                     fontweight="bold",
                     color="#b91c1c",
-                    bbox=dict(boxstyle="round,pad=0.2", facecolor="#fee2e2", edgecolor="#ef4444", alpha=0.9),
+                    bbox=dict(boxstyle="round,pad=0.25", facecolor="#fee2e2", edgecolor="#ef4444", alpha=0.92),
                     zorder=5
                 )
 
-        ax.set_xlabel("Apalancamiento de la Muestra (Leverage h_ii)", fontsize=10, fontweight="bold")
-        ax.set_ylabel("Distancia de Cook (D_i)", fontsize=10, fontweight="bold")
-        ax.set_title("Diagrama de Apalancamiento vs Distancia de Cook", fontsize=11, fontweight="bold")
-        ax.legend(loc="upper right", fontsize=8.5, frameon=True)
+        ax.set_xlabel(r"Apalancamiento de la Muestra ($h_{ii}$)", fontsize=10, fontweight="bold")
+        ax.set_ylabel(r"Distancia de Cook ($D_i$)", fontsize=10, fontweight="bold")
+        ax.set_title(r"Diagrama de Apalancamiento ($h_{ii}$) vs Distancia de Cook ($D_i$)", fontsize=11, fontweight="bold")
+        ax.legend(loc="upper left", fontsize=8.5, frameon=True, framealpha=0.92, facecolor="#ffffff", edgecolor="#cbd5e1")
         ax.grid(True, linestyle=":", alpha=0.5)
         sns.despine(ax=ax)
 
@@ -286,7 +348,7 @@ class OutlierPlots:
         (C) Diagrama de Influencia (T² de Hotelling vs Residuales Q).
         (D) Diagrama de Apalancamiento vs Distancia de Cook.
         """
-        lbl = metal_label or f"[{self.diag.target_col}] (µg/L)"
+        lbl = self._get_target_label(metal_label)
         fig, axes = plt.subplots(2, 2, figsize=figsize)
 
         # Panel (A): Univariante
@@ -309,7 +371,7 @@ class OutlierPlots:
         ax_a.set_title("(A) Distribución Univariante y Vallas de Tukey", fontsize=11, fontweight="bold")
         ax_a.set_xlabel(lbl, fontsize=9.5, fontweight="bold")
         ax_a.set_ylabel("Densidad", fontsize=9.5, fontweight="bold")
-        ax_a.legend(loc="upper right", fontsize=8, frameon=True)
+        ax_a.legend(loc="upper right", fontsize=8, frameon=True, framealpha=0.92, facecolor="#ffffff", edgecolor="#cbd5e1")
         ax_a.grid(True, linestyle=":", alpha=0.5)
         sns.despine(ax=ax_a)
 
@@ -326,46 +388,67 @@ class OutlierPlots:
         # Panel (B): Espacio Latente
         ax_b = axes[0, 1]
         T = self.diag.scores_T
-        t1, t2 = T[:, 0], T[:, 1] if self.diag.k_comp > 1 else np.zeros_like(T[:, 0])
+        t1 = T[:, 0]
+        t2 = T[:, 1] if self.diag.k_comp > 1 else np.zeros_like(T[:, 0])
         sc_b = ax_b.scatter(t1, t2, c=self.diag.y, cmap="viridis", s=75, edgecolors="#0f172a", linewidths=0.9, alpha=0.9)
+        
+        max_t1_b = float(np.max(t1))
+        span_t1_b = max(1.0, max_t1_b - float(np.min(t1)))
         for i, sid in enumerate(self.diag.ids):
             if (self.diag.T2_Hotelling[i] > self.diag.T2_limit) or (self.diag.cooks_D[i] > self.diag.cooks_threshold):
-                ax_b.annotate(sid, (t1[i], t2[i]), xytext=(5, 5), textcoords="offset points", fontsize=8, fontweight="bold", color="#b91c1c")
+                x_off = -22 if t1[i] > max_t1_b - span_t1_b * 0.25 else 5
+                ax_b.annotate(sid, (t1[i], t2[i]), xytext=(x_off, 5), textcoords="offset points", fontsize=8, fontweight="bold", color="#b91c1c")
         ax_b.axhline(0, color="#64748b", linestyle=":", linewidth=0.9)
         ax_b.axvline(0, color="#64748b", linestyle=":", linewidth=0.9)
-        ax_b.set_title("(B) Espacio de Puntuaciones Latentes PLS-1 (t₁ vs t₂)", fontsize=11, fontweight="bold")
-        ax_b.set_xlabel("Puntuación Latente 1 (t₁)", fontsize=9.5, fontweight="bold")
-        ax_b.set_ylabel("Puntuación Latente 2 (t₂)", fontsize=9.5, fontweight="bold")
+        ax_b.set_title(r"(B) Espacio de Puntuaciones Latentes PLS-1 ($t_1$ vs $t_2$)", fontsize=11, fontweight="bold")
+        ax_b.set_xlabel(r"Puntuación Latente 1 ($t_1$)", fontsize=9.5, fontweight="bold")
+        ax_b.set_ylabel(r"Puntuación Latente 2 ($t_2$)", fontsize=9.5, fontweight="bold")
         ax_b.grid(True, linestyle=":", alpha=0.5)
         sns.despine(ax=ax_b)
 
         # Panel (C): Influencia
         ax_c = axes[1, 0]
         sc_c = ax_c.scatter(self.diag.T2_Hotelling, self.diag.Q_residuals, c=self.diag.y, cmap="viridis", s=75, edgecolors="#0f172a", linewidths=0.9, alpha=0.9)
-        ax_c.axvline(self.diag.T2_limit, color="#b91c1c", linestyle="--", linewidth=1.4, label=f"Límite T² ({self.diag.T2_limit:.2f})")
-        ax_c.axhline(self.diag.Q_limit, color="#d97706", linestyle="--", linewidth=1.4, label=f"Límite Q ({self.diag.Q_limit:.2f})")
+        ax_c.axvline(self.diag.T2_limit, color="#b91c1c", linestyle="--", linewidth=1.4, label=rf"Límite $T^2$ ({self.diag.T2_limit:.2f})")
+        ax_c.axhline(self.diag.Q_limit, color="#d97706", linestyle="--", linewidth=1.4, label=rf"Límite $Q$ ({self.diag.Q_limit:.2f})")
+        
+        max_t2_c = max(float(np.max(self.diag.T2_Hotelling)), self.diag.T2_limit)
+        max_q_c = max(float(np.max(self.diag.Q_residuals)), self.diag.Q_limit)
+        ax_c.set_xlim(-0.02 * max_t2_c, max_t2_c * 1.18)
+        ax_c.set_ylim(-0.02 * max_q_c, max_q_c * 1.20)
+
         for i, sid in enumerate(self.diag.ids):
             if (self.diag.T2_Hotelling[i] > self.diag.T2_limit) or (self.diag.Q_residuals[i] > self.diag.Q_limit):
-                ax_c.annotate(sid, (self.diag.T2_Hotelling[i], self.diag.Q_residuals[i]), xytext=(5, 5), textcoords="offset points", fontsize=8, fontweight="bold", color="#b91c1c")
-        ax_c.set_title("(C) Diagrama de Influencia Quimiométrica (T² vs Q)", fontsize=11, fontweight="bold")
-        ax_c.set_xlabel("Distancia de Hotelling T²", fontsize=9.5, fontweight="bold")
-        ax_c.set_ylabel("Residuales Q (SPE)", fontsize=9.5, fontweight="bold")
-        ax_c.legend(loc="upper right", fontsize=8, frameon=True)
+                x_off = -22 if self.diag.T2_Hotelling[i] > max_t2_c * 0.75 else 5
+                y_off = -16 if self.diag.Q_residuals[i] > max_q_c * 0.75 else 5
+                ax_c.annotate(sid, (self.diag.T2_Hotelling[i], self.diag.Q_residuals[i]), xytext=(x_off, y_off), textcoords="offset points", fontsize=8, fontweight="bold", color="#b91c1c")
+        ax_c.set_title(r"(C) Diagrama de Influencia Quimiométrica ($T^2$ vs $Q$)", fontsize=11, fontweight="bold")
+        ax_c.set_xlabel(r"Distancia de Hotelling $T^2$", fontsize=9.5, fontweight="bold")
+        ax_c.set_ylabel(r"Residuales $Q$ ($\mathrm{SPE}$)", fontsize=9.5, fontweight="bold")
+        ax_c.legend(loc="upper left", fontsize=8, frameon=True, framealpha=0.92, facecolor="#ffffff", edgecolor="#cbd5e1")
         ax_c.grid(True, linestyle=":", alpha=0.5)
         sns.despine(ax=ax_c)
 
         # Panel (D): Apalancamiento vs Cook
         ax_d = axes[1, 1]
         sc_d = ax_d.scatter(self.diag.leverage, self.diag.cooks_D, c=self.diag.y, cmap="viridis", s=75, edgecolors="#0f172a", linewidths=0.9, alpha=0.9)
-        ax_d.axvline(self.diag.leverage_limit, color="#d97706", linestyle="--", linewidth=1.4, label=f"Límite 2p/n ({self.diag.leverage_limit:.2f})")
-        ax_d.axhline(self.diag.cooks_threshold, color="#b91c1c", linestyle="--", linewidth=1.4, label=f"Umbral Cook ({self.diag.cooks_threshold:.2f})")
+        ax_d.axvline(self.diag.leverage_limit, color="#d97706", linestyle="--", linewidth=1.4, label=rf"Límite $2p/n$ ({self.diag.leverage_limit:.2f})")
+        ax_d.axhline(self.diag.cooks_threshold, color="#b91c1c", linestyle="--", linewidth=1.4, label=rf"Umbral Cook ({self.diag.cooks_threshold:.2f})")
+        
+        max_lev_d = max(float(np.max(self.diag.leverage)), self.diag.leverage_limit)
+        max_cook_d = max(float(np.max(self.diag.cooks_D)), self.diag.cooks_threshold)
+        ax_d.set_xlim(-0.015, max_lev_d * 1.18)
+        ax_d.set_ylim(-0.015, max_cook_d * 1.20)
+
         for i, sid in enumerate(self.diag.ids):
             if (self.diag.leverage[i] > self.diag.leverage_limit) or (self.diag.cooks_D[i] > self.diag.cooks_threshold):
-                ax_d.annotate(sid, (self.diag.leverage[i], self.diag.cooks_D[i]), xytext=(5, 5), textcoords="offset points", fontsize=8, fontweight="bold", color="#b91c1c")
-        ax_d.set_title("(D) Diagrama de Apalancamiento vs Distancia de Cook", fontsize=11, fontweight="bold")
-        ax_d.set_xlabel("Apalancamiento (Leverage h_ii)", fontsize=9.5, fontweight="bold")
-        ax_d.set_ylabel("Distancia de Cook (D_i)", fontsize=9.5, fontweight="bold")
-        ax_d.legend(loc="upper right", fontsize=8, frameon=True)
+                x_off = -22 if self.diag.leverage[i] > max_lev_d * 0.75 else 5
+                y_off = -16 if self.diag.cooks_D[i] > max_cook_d * 0.75 else 5
+                ax_d.annotate(sid, (self.diag.leverage[i], self.diag.cooks_D[i]), xytext=(x_off, y_off), textcoords="offset points", fontsize=8, fontweight="bold", color="#b91c1c")
+        ax_d.set_title(r"(D) Diagrama de Apalancamiento ($h_{ii}$) vs Distancia de Cook ($D_i$)", fontsize=11, fontweight="bold")
+        ax_d.set_xlabel(r"Apalancamiento de la Muestra ($h_{ii}$)", fontsize=9.5, fontweight="bold")
+        ax_d.set_ylabel(r"Distancia de Cook ($D_i$)", fontsize=9.5, fontweight="bold")
+        ax_d.legend(loc="upper left", fontsize=8, frameon=True, framealpha=0.92, facecolor="#ffffff", edgecolor="#cbd5e1")
         ax_d.grid(True, linestyle=":", alpha=0.5)
         sns.despine(ax=ax_d)
 

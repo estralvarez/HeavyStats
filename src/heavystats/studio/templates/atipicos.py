@@ -162,54 +162,49 @@ rep_multi = ReporteDiagnosticoAtipicos(
     filepath_json=str(TABLAS_DIR / "diagnostico_quimiometrico_{key}.json")
 )
 
-display(rep_multi)"""
+display(rep_multi)
+
+# Interpretación técnica de observaciones atípicas e influyentes
+diag.imprimir_explicacion_atipicos()"""
         },
         {
             "tipo": "markdown",
             "contenido": f"""---
-## 5. Figuras Diagnósticas a 300 DPI ({nombre})
+## 5. Figuras Diagnósticas Quimiométricas a 300 DPI ({nombre})
 
-Generamos las cinco figuras del panel quimiométrico."""
+Generación de los paneles diagnósticos en espacio latente e influencia."""
         },
         {
             "tipo": "code",
             "contenido": f"""op = GraficosAtipicos(diag)
 
-# FIGURA 1: Distribución Univariante y Vallas de Tukey
-fig1, _ = op.plot_univariate_fences(
+# FIGURA 1: Espacio Latente de Puntuaciones (t1 vs t2)
+fig1, _ = op.plot_latent_scores(
+    filepath=str(GRAFICOS_DIR / "figura_01_espacio_latente_t1_t2.png")
+)
+fig1.savefig(GRAFICOS_DIR / "figura_01_espacio_latente_t1_t2.pdf", dpi=300, bbox_inches="tight")
+plt.show()
+
+# FIGURA 2: Diagrama de Influencia Quimiométrica (T² vs Q)
+fig2, _ = op.plot_influence_space(
+    filepath=str(GRAFICOS_DIR / "figura_02_influencia_hotelling_q.png")
+)
+fig2.savefig(GRAFICOS_DIR / "figura_02_influencia_hotelling_q.pdf", dpi=300, bbox_inches="tight")
+plt.show()
+
+# FIGURA 3: Diagrama de Apalancamiento vs Distancia de Cook
+fig3, _ = op.plot_leverage_cook(
+    filepath=str(GRAFICOS_DIR / "figura_03_apalancamiento_cook.png")
+)
+fig3.savefig(GRAFICOS_DIR / "figura_03_apalancamiento_cook.pdf", dpi=300, bbox_inches="tight")
+plt.show()
+
+# FIGURA 4: Dashboard Integral Consolidado (2x2 a 300 DPI)
+fig4, _ = op.plot_dashboard_2x2(
     metal_label="{nombre} Plasmático [{unidad}]",
-    filepath=str(GRAFICOS_DIR / "figura_01_univariante_tukey_{key}.png")
+    filepath=str(GRAFICOS_DIR / "figura_04_dashboard_diagnostico_2x2.png")
 )
-fig1.savefig(GRAFICOS_DIR / "figura_01_univariante_tukey_{key}.pdf", dpi=300, bbox_inches="tight")
-plt.show()
-
-# FIGURA 2: Espacio Latente de Puntuaciones (t1 vs t2)
-fig2, _ = op.plot_latent_scores(
-    filepath=str(GRAFICOS_DIR / "figura_02_espacio_latente_t1_t2.png")
-)
-fig2.savefig(GRAFICOS_DIR / "figura_02_espacio_latente_t1_t2.pdf", dpi=300, bbox_inches="tight")
-plt.show()
-
-# FIGURA 3: Diagrama de Influencia (T² vs Q)
-fig3, _ = op.plot_influence_space(
-    filepath=str(GRAFICOS_DIR / "figura_03_influencia_hotelling_q.png")
-)
-fig3.savefig(GRAFICOS_DIR / "figura_03_influencia_hotelling_q.pdf", dpi=300, bbox_inches="tight")
-plt.show()
-
-# FIGURA 4: Apalancamiento vs Distancia de Cook
-fig4, _ = op.plot_leverage_cook(
-    filepath=str(GRAFICOS_DIR / "figura_04_apalancamiento_cook.png")
-)
-fig4.savefig(GRAFICOS_DIR / "figura_04_apalancamiento_cook.pdf", dpi=300, bbox_inches="tight")
-plt.show()
-
-# FIGURA 5: Dashboard Integral Consolidado (2x2 a 300 DPI)
-fig5, _ = op.plot_dashboard_2x2(
-    metal_label="{nombre} Plasmático [{unidad}]",
-    filepath=str(GRAFICOS_DIR / "figura_05_dashboard_diagnostico_2x2.png")
-)
-fig5.savefig(GRAFICOS_DIR / "figura_05_dashboard_diagnostico_2x2.pdf", dpi=300, bbox_inches="tight")
+fig4.savefig(GRAFICOS_DIR / "figura_04_dashboard_diagnostico_2x2.pdf", dpi=300, bbox_inches="tight")
 plt.show()"""
         }
     ]

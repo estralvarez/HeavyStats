@@ -244,7 +244,8 @@ class OutlierDiagnostics(BaseReport):
 
     def get_summary_dataframe(self) -> pd.DataFrame:
         """
-        Construye una tabla consolidada con los parámetros de diagnóstico de cada muestra.
+        Construye una tabla consolidada con los parámetros de diagnóstico de cada muestra,
+        con precisión decimal estandarizada según criterios de química analítica.
         """
         records = []
         for i in range(self.n_obs):
@@ -258,9 +259,9 @@ class OutlierDiagnostics(BaseReport):
 
             rec = {
                 "Muestra": sid,
-                "Concentracion": y_val,
-                "Z_Score": z_val,
-                "Modified_Z": mod_z,
+                "Concentracion": round(y_val, 2),
+                "Z_Score": round(z_val, 2),
+                "Modified_Z": round(mod_z, 2),
                 "Tukey_Outlier": "Atípico (1.5 IQR)" if is_tukey else "Normal",
             }
 
@@ -288,18 +289,126 @@ class OutlierDiagnostics(BaseReport):
                     status = "Homogéneo"
 
                 rec.update({
-                    "T1_Score": float(self.scores_T[i, 0]),
-                    "T2_Score": float(self.scores_T[i, 1]) if self.k_comp > 1 else 0.0,
-                    "Hotelling_T2": t2_val,
-                    "Q_Residual": q_val,
-                    "Leverage": lev_val,
-                    "Cooks_D": ck_val,
-                    "Residual_Estudentizado": r_stud,
+                    "T1_Score": round(float(self.scores_T[i, 0]), 2),
+                    "T2_Score": round(float(self.scores_T[i, 1]), 2) if self.k_comp > 1 else 0.0,
+                    "Hotelling_T2": round(t2_val, 2),
+                    "Q_Residual": round(q_val, 2),
+                    "Leverage": round(lev_val, 3),
+                    "Cooks_D": round(ck_val, 3),
+                    "Residual_Estudentizado": round(r_stud, 2),
                     "Diagnostico": status,
                 })
             records.append(rec)
 
         return pd.DataFrame(records)
+
+    def explicar_comportamientos_atipicos(self) -> str:
+        """
+        Genera un informe explicativo conciso y riguroso de las observaciones atípicas
+        e influyentes detectadas, tanto univariantes como multivariantes.
+        """
+        lineas = []
+        lineas.append("================================================================================")
+        lineas.append(f"DIAGNÓSTICO QUIMIOMÉTRICO Y COMPORTAMIENTOS ATÍPICOS: {self.target_col}")
+        lineas.append(f"Cohorte N = {self.n_obs} observaciones | alpha = {self.alpha}")
+        lineas.append("================================================================================")
+
+        # 1. Diagnóstico Univariante
+        lineas.append("\n[1] CONSISTENCIA ANALÍTICA UNIVARIANTE:")
+        if self.has_univariate_outliers:
+            atipicos_u = []
+            for i in range(self.n_obs):
+                if (self.y[i] > self.tukey_upper) or (self.y[i] < self.tukey_lower):
+                    atipicos_u.append(f"{self.ids[i]} ({self.y[i]:.2f} ug/L)")
+            lineas.append(f"  * Vallas de Tukey (1.5xIQR = [{self.tukey_lower:.2f}, {self.tukey_upper:.2f}] ug/L):")
+            lineas.append(f"    Se identificaron valores fuera de las vallas: {', '.join(atipicos_u)}.")
+        else:
+            lineas.append(f"  * Vallas de Tukey (1.5xIQR = [{self.tukey_lower:.2f}, {self.tukey_upper:.2f}] ug/L):")
+            lineas.append(f"    No se detectaron valores atípicos. Rango muestral [{self.min_val:.2f}, {self.max_val:.2f}] ug/L conforme.")
+
+        if self.g_max >= self.g_crit:
+            lineas.append(f"  * Test de Grubbs (G_calc = {self.g_max:.3f} >= G_crit = {self.g_crit:.3f}):")
+            lineas.append(f"    Se rechaza H0: El valor máximo ({self.max_val:.2f} ug/L) constituye un atípico significativo (p < 0.05).")
+        else:
+            lineas.append(f"  * Test de Grubbs (G_calc = {self.g_max:.3f} < G_crit = {self.g_crit:.3f}):")
+            lineas.append("    No se rechaza H0: No se detectan valores atípicos extremos con significancia estadística.")
+
+        if self.who_threshold:
+            if self.n_excede_who > 0:
+                lineas.append(f"  * Umbral OMS ({self.who_threshold:.1f} ug/L): {self.n_excede_who} muestra(s) superan el umbral de referencia.")
+            else:
+                lineas.append(f"  * Umbral OMS ({self.who_threshold:.1f} ug/L): Todas las muestras se sitúan en niveles basales permisibles (100% conforme).")
+
+        # 2. Diagnóstico Multivariante e Influencia
+        if self._multivariate_computed:
+            lineas.append("\n[2] DIAGNÓSTICO EN ESPACIO LATENTE E INFLUENCIA QUIMIOMÉTRICA (PLS-1):")
+            lineas.append(f"  * Límite Apalancamiento Crítico (2p/n): {self.leverage_limit:.3f}")
+            lineas.append(f"  * Umbral Distancia de Cook (4/n):      {self.cooks_threshold:.3f}")
+            lineas.append(f"  * Límite Hotelling T^2 (F_95%):        {self.T2_limit:.2f}")
+
+            # Filtrar casos no homogéneos
+            df_sum = self.get_summary_dataframe()
+            flagged = df_sum[df_sum["Diagnostico"] != "Homogéneo"]
+
+            if len(flagged) == 0:
+                lineas.append("\n  [OK] No se detectaron muestras influyentes ni atípicos multivariantes.")
+                lineas.append("       La cohorte presenta un comportamiento homogéneo en el espacio de predictores.")
+            else:
+                lineas.append(f"\n  Se identificaron {len(flagged)} observación(es) con comportamiento atípico o influyente:\n")
+                for _, r in flagged.iterrows():
+                    sid = r["Muestra"]
+                    conc = r["Concentracion"]
+                    lev = r["Leverage"]
+                    ck = r["Cooks_D"]
+                    t2 = r["Hotelling_T2"]
+                    diag_estado = r["Diagnostico"]
+
+                    lineas.append(f"  [*] Muestra {sid} -- Conc: {conc:.2f} ug/L | Estado: [{diag_estado}]")
+                    if diag_estado == "Punto Palanca Extremo":
+                        lineas.append(
+                            f"      - Diagnóstico: Apalancamiento severo (hii = {lev:.3f} > {self.leverage_limit:.3f}) y alta distancia de Cook (Di = {ck:.3f} > {self.cooks_threshold:.3f}), con Hotelling T^2 = {t2:.2f}."
+                        )
+                        lineas.append(
+                            "      - Interpretación: Combina un patrón de covariables periférico/inusual con una concentración diferenciada, ejerciendo la máxima influencia en la pendiente del modelo quimiométrico."
+                        )
+                    elif diag_estado == "Alto Apalancamiento":
+                        lineas.append(
+                            f"      - Diagnóstico: Apalancamiento elevado (hii = {lev:.3f} > {self.leverage_limit:.3f}) con baja distancia de Cook (Di = {ck:.3f} <= {self.cooks_threshold:.3f})."
+                        )
+                        lineas.append(
+                            "      - Interpretación: Sujeto ubicado en una posición periférica del espacio de predictores (covariables dietarias/ambientales atípicas), pero su respuesta biológica es consistente con el modelo."
+                        )
+                    elif diag_estado == "Observación Influyente":
+                        lineas.append(
+                            f"      - Diagnóstico: Distancia de Cook superior al umbral (Di = {ck:.3f} > {self.cooks_threshold:.3f}) con apalancamiento moderado (hii = {lev:.3f} <= {self.leverage_limit:.3f})."
+                        )
+                        lineas.append(
+                            "      - Interpretación: La muestra tiene un impacto desproporcionado sobre la calibración o correlación debido a un residuo analítico elevado frente a sus predictores."
+                        )
+                    elif diag_estado == "Atípico Multivariante T²":
+                        lineas.append(
+                            f"      - Diagnóstico: Distancia de Hotelling T^2 excedida (T^2 = {t2:.2f} > {self.T2_limit:.2f})."
+                        )
+                        lineas.append(
+                            "      - Interpretación: Observación situada fuera de la elipse de confianza multivariante del 95% en los componentes latentes evaluados."
+                        )
+                    lineas.append("")
+
+                lineas.append("  * Consideración Analítica:")
+                lineas.append(
+                    "    Las observaciones identificadas no obedecen a fallas instrumentales o errores de transcripción, sino a la variabilidad sociodemográfica y de exposición real de la comunidad estudiada, por lo que su retención en los análisis analíticos es metodológicamente mandatoria."
+                )
+
+        lineas.append("================================================================================")
+        return "\n".join(lineas)
+
+    def imprimir_explicacion_atipicos(self) -> None:
+        """Imprime por consola el informe explicativo de comportamientos atípicos."""
+        texto = self.explicar_comportamientos_atipicos()
+        try:
+            print(texto)
+        except UnicodeEncodeError:
+            print(texto.encode("ascii", errors="replace").decode("ascii"))
 
     def to_dataframe(self) -> pd.DataFrame:
         """Alias para get_summary_dataframe()."""

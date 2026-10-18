@@ -1,10 +1,11 @@
 """
 Módulo de perfil de subcohortes, similitud correlacional y factores compartidos.
 Implementa:
-  1. Ranking de similitud / correlación de Spearman frente a biomarcadores metálicos.
-  2. Contraste bioestadístico y toxicológico de subcohortes con anotación individual de IDs.
+  1. Ranking de similitud / correlación de Spearman frente a biomarcadores metálicos (Plomo, Mercurio, Cadmio).
+  2. Contraste bioestadístico y toxicológico de subcohortes con umbrales normativos (CDC/EPA/OMS) y anotación de IDs.
   3. Minería de factores compartidos y prevalencia diferencial.
   4. Mosaico editorial multipanel coordinado (Paneles A, B y C).
+  5. Tamizaje sistemático automatizado de contrastes toxicológicos.
 """
 
 from typing import List, Dict, Optional, Any, Tuple, Union, Sequence, Callable
@@ -17,6 +18,11 @@ from scipy.stats import mannwhitneyu, spearmanr, pearsonr, ttest_ind
 from heavystats.bivariante.plots.base import (
     BivariateBasePlots,
     DEFAULT_BIOMEDICAL_METAL_LABELS,
+    DEFAULT_REFERENCE_LABELS,
+)
+from heavystats.bivariante.constants import (
+    DEFAULT_PRIMARY_METALS,
+    DEFAULT_METAL_LIMITS,
 )
 
 DEFAULT_DIETARY_MAP: Dict[Any, str] = {
@@ -36,17 +42,103 @@ DEFAULT_DIETARY_MAP: Dict[Any, str] = {
 class SubcohortPlots:
     """Clase base para análisis de subcohortes, rankings correlacionales y factores compartidos."""
 
+    @staticmethod
+    def _clean_metal_name(col: str) -> str:
+        """Retorna el nombre limpio en español del metal (Plomo, Mercurio, Cadmio)."""
+        col_l = str(col).lower()
+        if any(k in col_l for k in ["plomo", "pb", "lead"]):
+            return "Plomo"
+        if any(k in col_l for k in ["mercurio", "hg", "mercury"]):
+            return "Mercurio"
+        if any(k in col_l for k in ["cadmio", "cd", "cadmium"]):
+            return "Cadmio"
+        return str(col).replace("_", " ").title()
+
+    def _resolve_target_metal(
+        self: BivariateBasePlots,
+        target_metal: Optional[str] = None,
+        metal: Optional[str] = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Resuelve de forma robusta la columna del metal biológico garantizando compatibilidad
+        con la triada Plomo (Plomo_ug_dL), Mercurio (Mercurio_ug_L) y Cadmio (Cadmio_ug_L).
+        """
+        target_m = (
+            target_metal
+            or metal
+            or kwargs.get("target")
+            or kwargs.get("col_metal")
+            or getattr(self, "default_metal", None)
+        )
+        if target_m is None and self.df is not None:
+            for m in ["Plomo_ug_dL", "Mercurio_ug_L", "Cadmio_ug_L"]:
+                if m in self.df.columns:
+                    target_m = m
+                    break
+        if target_m is None:
+            target_m = getattr(self, "default_metal", "Plomo_ug_dL")
+
+        metal_resolved = self._resolve_column(target_m)
+        if self.df is not None and metal_resolved not in self.df.columns:
+            available_metals = [
+                c for c in self.df.columns
+                if any(m in c.lower() for m in ["plomo", "mercurio", "cadmio", "pb", "hg", "cd"])
+            ]
+            raise ValueError(
+                f"Columna de metal '{metal_resolved}' no encontrada en el DataFrame. "
+                f"Metales detectados disponibles: {available_metals}."
+            )
+        return metal_resolved
+
+    def _resolve_default_criterion(
+        self: BivariateBasePlots,
+        metal_col: str,
+        criterion_col: Optional[str] = None,
+    ) -> str:
+        """
+        Resuelve la variable de criterio dietario canónica según el metal objetivo:
+          - Plomo (Pb): Alim_Leguminosas / Alim_Cereales
+          - Mercurio (Hg): Alim_Pescados / Alim_Atun
+          - Cadmio (Cd): Alim_Vegetales / Alim_Tuberculos
+        """
+        if criterion_col is not None:
+            return self._resolve_column(criterion_col)
+
+        metal_clean = self._clean_metal_name(metal_col).lower()
+        if "plomo" in metal_clean:
+            candidates = ["Alim_Leguminosas", "Alim_Cereales"]
+        elif "mercurio" in metal_clean:
+            candidates = ["Alim_Pescados", "Alim_Atun"]
+        elif "cadmio" in metal_clean:
+            candidates = ["Alim_Vegetales", "Alim_Tuberculos"]
+        else:
+            candidates = ["Alim_Pescados", "Alim_Leguminosas"]
+
+        if self.df is not None:
+            for cand in candidates:
+                if cand in self.df.columns:
+                    return cand
+            alim_cols = [c for c in self.df.columns if c.startswith("Alim_")]
+            if alim_cols:
+                return alim_cols[0]
+            non_metal = [c for c in self.df.columns if c != metal_col and c not in DEFAULT_PRIMARY_METALS]
+            if non_metal:
+                return non_metal[0]
+        return candidates[0]
+
     def similarity_ranking_plot(
         self: BivariateBasePlots,
         target_metal: Optional[str] = None,
         metal: Optional[str] = None,
-        item_cols: Optional[List[str]] = None,
+        item_cols: Optional[Union[List[str], str]] = None,
         highlight_item: Optional[str] = None,
         highlight_color: str = "#2b5c8f",
         sig_color: str = "#d95f02",
         nonsig_color: str = "#999999",
         method: str = "nonparametric",
-        title: Optional[str] = None,
+        title: Optional[Union[str, bool]] = None,
+        show_title: bool = True,
         ax: Optional[plt.Axes] = None,
         figsize: Tuple[float, float] = (8.0, 5.5),
         filepath: Optional[str] = None,
@@ -55,16 +147,17 @@ class SubcohortPlots:
     ) -> Tuple[plt.Figure, plt.Axes, pd.DataFrame]:
         """
         Gráfico A: Ranking horizontal de asociación correlacional de un conjunto
-        de variables (e.g. dieta o ambientales) frente a la concentración biológica del metal.
+        de variables (e.g. dieta o ambientales) frente a la concentración biológica del metal
+        (Plomo, Mercurio o Cadmio).
 
         Parameters
         ----------
         target_metal : str, optional
-            Columna de concentración del metal.
+            Columna de concentración del metal ("Plomo_ug_dL", "Mercurio_ug_L", "Cadmio_ug_L").
         metal : str, optional
             Alias de target_metal.
-        item_cols : list of str, optional
-            Lista de columnas a evaluar. Si es None, selecciona todas las que inicien con 'Alim_'.
+        item_cols : list of str or str, optional
+            Lista de columnas a evaluar o nombre de una columna. Si es None, selecciona todas las que inicien con 'Alim_'.
         highlight_item : str, optional
             Nombre de la columna a resaltar visualmente.
         highlight_color : str
@@ -75,8 +168,11 @@ class SubcohortPlots:
             Color para ítems no significativos.
         method : {"nonparametric", "parametric"}, default="nonparametric"
             Método de correlación: "nonparametric" (Spearman rho) o "parametric" (Pearson r).
-        title : str, optional
-            Título del gráfico.
+        title : str or bool, optional
+            Título del gráfico. Si es None o True (y show_title=True), se genera automáticamente
+            incluyendo el metal evaluado. Si es False o "", o si show_title=False, se omite el título.
+        show_title : bool, default=True
+            Indica si se debe mostrar el título en el eje. Pasar False para suprimir el título.
         ax : plt.Axes, optional
             Eje de matplotlib donde renderizar. Si es None, se crea nueva figura.
         figsize : tuple
@@ -90,23 +186,27 @@ class SubcohortPlots:
         -------
         Tuple[plt.Figure, plt.Axes, pd.DataFrame]
         """
-        target_m = (
-            target_metal
-            or metal
-            or kwargs.get("target")
-            or kwargs.get("col_metal")
-            or getattr(self, "default_metal", "Mercurio_ug_L")
-        )
-        metal_resolved = self._resolve_column(target_m)
-        if metal_resolved not in self.df.columns:
-            raise ValueError(f"Columna de metal '{metal_resolved}' no encontrada en el DataFrame.")
+        metal_resolved = self._resolve_target_metal(target_metal, metal, **kwargs)
 
         if item_cols is None:
             item_cols = [c for c in self.df.columns if c.startswith("Alim_")]
+        elif isinstance(item_cols, str):
+            item_cols = [item_cols]
+        else:
+            item_cols = list(item_cols)
 
-        valid_items = [c for c in item_cols if c in self.df.columns]
+        # Excluir metales pesados y columnas continuas/metadatos
+        exclude_items = set(DEFAULT_PRIMARY_METALS) | {
+            metal_resolved, "Muestra_Codificada", "ID", "id", "sample_id",
+            "Score_Riesgo", "Es_Expuesto", "Riesgo_Pb", "Riesgo_Hg", "Riesgo_Cd",
+            "Nivel_Riesgo", "IMC", "Peso_kg", "Altura_cm"
+        }
+        valid_items = [c for c in item_cols if c in self.df.columns and c not in exclude_items]
         if not valid_items:
-            raise ValueError("No se encontraron columnas válidas para calcular el ranking de similitud.")
+            raise ValueError(
+                f"No se encontraron columnas válidas para calcular el ranking de similitud con '{metal_resolved}'. "
+                f"Columnas recibidas: {item_cols}."
+            )
 
         is_parametric = self._is_parametric(method, **kwargs)
         res_correlacion = []
@@ -123,6 +223,7 @@ class SubcohortPlots:
             coef_val = float(coef) if pd.notna(coef) else 0.0
             p_val = float(pval) if pd.notna(pval) else 1.0
             res_correlacion.append({
+                "Metal": metal_resolved,
                 "Variable": c,
                 "Nombre": clean_name,
                 "Coeficiente": coef_val,
@@ -158,17 +259,24 @@ class SubcohortPlots:
         )
         ax.axvline(0, color="black", linestyle="--", linewidth=0.8)
 
+        metal_clean = self._clean_metal_name(metal_resolved)
+        all_diet = all(c.startswith("Alim_") for c in valid_items)
+        domain_name = "Dietaria" if all_diet else "de Variables"
+
         if is_parametric:
             ax.set_xlabel(r"Coeficiente de Pearson ($r$)", fontsize=9.5, fontweight="bold")
-            default_title = "A. Similitud de Alimentos vs. Concentración Sanguínea (Pearson $r$)"
+            default_title = f"A. Similitud {domain_name} vs. Carga de {metal_clean} (Pearson $r$)"
         else:
             ax.set_xlabel(r"Coeficiente de Spearman ($\rho_s$)", fontsize=9.5, fontweight="bold")
-            default_title = "A. Similitud de Alimentos vs. Concentración Sanguínea (Spearman $\rho_s$)"
+            default_title = rf"A. Similitud {domain_name} vs. Carga de {metal_clean} (Spearman $\rho_s$)"
         
-        if title:
-            ax.set_title(title, fontsize=10.5, fontweight="bold", loc="left")
+        # Manejo de título opcional
+        if show_title and title is not False and (not isinstance(title, str) or title.strip() != ""):
+            resolved_title = title if (isinstance(title, str) and title.strip()) else default_title
+            ax.set_title(resolved_title, fontsize=10.5, fontweight="bold", loc="left")
         else:
-            ax.set_title(default_title, fontsize=10.5, fontweight="bold", loc="left")
+            ax.set_title("", loc="left")
+            ax.set_title("", loc="center")
 
         ax.grid(axis="x", linestyle=":", alpha=0.6)
         self._clean_spines_and_ticks(ax)
@@ -209,9 +317,13 @@ class SubcohortPlots:
         id_col: Optional[str] = None,
         annotate_ids: bool = False,
         show_ids: bool = False,
+        show_limit: bool = True,
+        permissible_limit: Optional[float] = None,
+        limit_label: Optional[str] = None,
         palette: Optional[Sequence[str]] = None,
         point_color: str = "#08519c",
-        title: Optional[str] = None,
+        title: Optional[Union[str, bool]] = None,
+        show_title: bool = True,
         ax: Optional[plt.Axes] = None,
         figsize: Tuple[float, float] = (6.5, 5.0),
         filepath: Optional[str] = None,
@@ -221,7 +333,7 @@ class SubcohortPlots:
         """
         Gráfico B: Contraste bioestadístico y toxicológico de distribución plasmática entre
         el subgrupo aislado (por ejemplo, la opción de consumo de mayor frecuencia) y el resto
-        de la cohorte.
+        de la cohorte para Plomo, Mercurio o Cadmio, incorporando umbrales toxicológicos de referencia.
 
         Parameters
         ----------
@@ -250,12 +362,22 @@ class SubcohortPlots:
             Si es True, anota los IDs de cada participante sobre el gráfico.
         show_ids : bool, default=False
             Alias de annotate_ids.
+        show_limit : bool, default=True
+            Si es True, traza la línea punteada con el umbral de referencia toxicológico
+            (CDC 3.5 µg/dL para Pb, EPA 5.0 µg/L para Hg, OMS 1.0 µg/L para Cd).
+        permissible_limit : float, optional
+            Límite toxicológico personalizado. Si es None, resuelve el límite canónico del metal.
+        limit_label : str, optional
+            Etiqueta textual para la línea de referencia toxicológica.
         palette : sequence of str, optional
             Colores para las cajas del boxplot.
         point_color : str, default="#08519c"
             Color para los puntos del stripplot.
-        title : str, optional
-            Título del gráfico.
+        title : str or bool, optional
+            Título del gráfico. Si es None o True (y show_title=True), se genera automáticamente
+            el título del contraste. Si es False o "", o si show_title=False, se omite el título.
+        show_title : bool, default=True
+            Indica si se debe mostrar el título en el eje. Pasar False para suprimir el título.
         ax : plt.Axes, optional
             Eje de matplotlib donde renderizar.
         figsize : tuple, default=(6.5, 5.0)
@@ -269,22 +391,11 @@ class SubcohortPlots:
         -------
         Tuple[plt.Figure, plt.Axes, Dict[str, Any]]
         """
-        target_m = (
-            target_metal
-            or metal
-            or kwargs.get("target")
-            or kwargs.get("col_metal")
-            or getattr(self, "default_metal", "Mercurio_ug_L")
-        )
-        metal_resolved = self._resolve_column(target_m)
-        if metal_resolved not in self.df.columns:
-            raise ValueError(f"Columna de metal '{metal_resolved}' no encontrada en el DataFrame.")
+        metal_resolved = self._resolve_target_metal(target_metal, metal, **kwargs)
 
         # Construcción de la máscara si no fue suministrada directamente
         if subcohort_mask is None:
-            if criterion_col is None:
-                raise ValueError("Debe suministrar 'subcohort_mask' o 'criterion_col'.")
-            col_crit = self._resolve_column(criterion_col)
+            col_crit = self._resolve_default_criterion(metal_resolved, criterion_col)
             if col_crit not in self.df.columns:
                 raise ValueError(f"Columna de criterio '{col_crit}' no encontrada en el DataFrame.")
             
@@ -309,13 +420,15 @@ class SubcohortPlots:
                 mask = (s < criterion_val)
             else:
                 raise ValueError(f"Operador '{comparison_op}' no reconocido.")
+            criterion_used = col_crit
         else:
             mask = pd.Series(subcohort_mask, index=self.df.index).astype(bool)
+            criterion_used = criterion_col
 
         # Generar etiquetas descriptivas si no fueron provistas
         if subcohort_label is None or subcohort_label == "Subcohorte":
-            if criterion_col is not None:
-                clean_col = criterion_col.replace("Alim_", "").replace("Salud_", "").replace("Exposicion_", "").replace("_", " ").title()
+            if criterion_used is not None:
+                clean_col = criterion_used.replace("Alim_", "").replace("Salud_", "").replace("Exposicion_", "").replace("_", " ").title()
                 cat_desc = DEFAULT_DIETARY_MAP.get(criterion_val, str(criterion_val))
                 if comparison_op == "==":
                     subcohort_label = f"{clean_col}: {cat_desc}"
@@ -336,22 +449,27 @@ class SubcohortPlots:
         if n_sub == 0 or n_res == 0:
             raise ValueError(f"División inválida: Subcohorte tiene n={n_sub} y Resto tiene n={n_res}.")
 
-        hg_sub = pd.to_numeric(subgrupo[metal_resolved], errors="coerce").dropna()
-        hg_res = pd.to_numeric(resto[metal_resolved], errors="coerce").dropna()
+        metal_sub = pd.to_numeric(subgrupo[metal_resolved], errors="coerce").dropna()
+        metal_res = pd.to_numeric(resto[metal_resolved], errors="coerce").dropna()
+
+        # Resolución del umbral de referencia toxicológico
+        limit_val = self._resolve_limit(metal_resolved, permissible_limit)
+        if limit_val is None:
+            limit_val = DEFAULT_METAL_LIMITS.get(metal_resolved)
 
         is_parametric = self._is_parametric(method, **kwargs)
 
         if is_parametric:
-            t_res = ttest_ind(hg_sub, hg_res, equal_var=False)
+            t_res = ttest_ind(metal_sub, metal_res, equal_var=False)
             t_stat = float(t_res.statistic)
             p_val = float(t_res.pvalue)
-            mean_sub = float(hg_sub.mean())
-            std_sub = float(hg_sub.std())
-            mean_res = float(hg_res.mean())
-            std_res = float(hg_res.std())
+            mean_sub = float(metal_sub.mean())
+            std_sub = float(metal_sub.std())
+            mean_res = float(metal_res.mean())
+            std_res = float(metal_res.std())
 
             # Hedges' g
-            n1, n2 = len(hg_sub), len(hg_res)
+            n1, n2 = len(metal_sub), len(metal_res)
             diff_mean = mean_sub - mean_res
             denom = (n1 - 1) * (std_sub ** 2) + (n2 - 1) * (std_res ** 2)
             s_pooled = np.sqrt(denom / (n1 + n2 - 2)) if (n1 + n2 - 2) > 0 else 1.0
@@ -361,6 +479,7 @@ class SubcohortPlots:
 
             stats_dict = {
                 "method": "parametric",
+                "metal": metal_resolved,
                 "n_subcohort": n_sub,
                 "n_rest": n_res,
                 "t_stat": t_stat,
@@ -370,20 +489,22 @@ class SubcohortPlots:
                 "subcohort_std": std_sub,
                 "rest_mean": mean_res,
                 "rest_std": std_res,
-                "criterion_col": criterion_col,
+                "criterion_col": criterion_used,
                 "criterion_val": criterion_val,
+                "permissible_limit": limit_val,
             }
             test_name = "t de Welch"
         else:
-            u_stat, u_pval = mannwhitneyu(hg_sub, hg_res, alternative="two-sided")
-            q25_sub, med_sub, q75_sub = np.percentile(hg_sub, [25, 50, 75])
-            q25_res, med_res, q75_res = np.percentile(hg_res, [25, 50, 75])
+            u_stat, u_pval = mannwhitneyu(metal_sub, metal_res, alternative="two-sided")
+            q25_sub, med_sub, q75_sub = np.percentile(metal_sub, [25, 50, 75])
+            q25_res, med_res, q75_res = np.percentile(metal_res, [25, 50, 75])
 
             r_rb = 1.0 - (2.0 * float(u_stat) / (n_sub * n_res)) if (n_sub * n_res) > 0 else 0.0
             p_val = float(u_pval)
 
             stats_dict = {
                 "method": "nonparametric",
+                "metal": metal_resolved,
                 "n_subcohort": n_sub,
                 "n_rest": n_res,
                 "u_stat": float(u_stat),
@@ -393,8 +514,9 @@ class SubcohortPlots:
                 "subcohort_iqr": (float(q25_sub), float(q75_sub)),
                 "rest_median": float(med_res),
                 "rest_iqr": (float(q25_res), float(q75_res)),
-                "criterion_col": criterion_col,
+                "criterion_col": criterion_used,
                 "criterion_val": criterion_val,
+                "permissible_limit": limit_val,
             }
             test_name = "Mann–Whitney"
 
@@ -453,7 +575,30 @@ class SubcohortPlots:
                     fontweight="bold",
                 )
 
-        metal_lbl = DEFAULT_BIOMEDICAL_METAL_LABELS.get(metal_resolved, metal_resolved)
+        # Trazado de línea de referencia toxicológica permisible
+        if show_limit and limit_val is not None:
+            ax.axhline(
+                y=limit_val,
+                color="#dc2626",
+                linestyle="--",
+                linewidth=1.2,
+                alpha=0.85,
+                zorder=2,
+            )
+            ref_text = limit_label or DEFAULT_REFERENCE_LABELS.get(metal_resolved, f"Ref: {limit_val:g}")
+            ax.text(
+                0.98,
+                limit_val,
+                f"{ref_text} ",
+                transform=ax.get_yaxis_transform(),
+                color="#b91c1c",
+                va="bottom",
+                ha="right",
+                fontsize=8.0,
+                fontweight="bold",
+            )
+
+        metal_lbl = DEFAULT_BIOMEDICAL_METAL_LABELS.get(metal_resolved, self.get_label(metal_resolved))
         ax.set_ylabel(metal_lbl, fontsize=9.5, fontweight="bold")
         ax.set_xlabel("")
         ax.grid(axis="y", linestyle=":", alpha=0.6)
@@ -461,15 +606,15 @@ class SubcohortPlots:
 
         p_str = self._format_p_val(p_val)
         sig_tag = "Significativo p < 0.05" if p_val < 0.05 else "n.s."
-        if title:
-            ax.set_title(title, fontsize=10.5, fontweight="bold", loc="left")
+        metal_clean = self._clean_metal_name(metal_resolved)
+        default_title = f"B. Carga Corporal de {metal_clean} ({test_name} {p_str}, {sig_tag})"
+        # Manejo de título opcional
+        if show_title and title is not False and (not isinstance(title, str) or title.strip() != ""):
+            resolved_title = title if (isinstance(title, str) and title.strip()) else default_title
+            ax.set_title(resolved_title, fontsize=10.5, fontweight="bold", loc="left")
         else:
-            ax.set_title(
-                f"B. Distribución de Carga Corporal ({test_name} {p_str}, {sig_tag})",
-                fontsize=10.5,
-                fontweight="bold",
-                loc="left",
-            )
+            ax.set_title("", loc="left")
+            ax.set_title("", loc="center")
 
         if filepath:
             self._save_figure(fig, filepath=filepath, dpi=dpi)
@@ -486,30 +631,65 @@ class SubcohortPlots:
         max_factors: int = 10,
         subcohort_color: str = "#2171b5",
         rest_color: str = "#bdbdbd",
-        title: Optional[str] = None,
+        title: Optional[Union[str, bool]] = None,
+        show_title: bool = True,
         ax: Optional[plt.Axes] = None,
         figsize: Tuple[float, float] = (10.0, 5.5),
         filepath: Optional[str] = None,
         dpi: int = 300,
+        **kwargs: Any,
     ) -> Tuple[plt.Figure, plt.Axes, pd.DataFrame]:
         """
         Gráfico C: Factores compartidos y prevalencia diferencial entre la subcohorte
         y el resto de la cohorte para variables con consenso superior al umbral.
+        Excluye metales pesados, identificadores y puntuaciones sintéticas para garantizar minería limpia.
+
+        Parameters
+        ----------
+        subcohort_mask : boolean mask
+            Máscara booleana para seleccionar la subcohorte.
+        subcohort_label : str, default="Subcohorte"
+            Etiqueta para la subcohorte en la leyenda.
+        rest_label : str, default="Resto Cohorte"
+            Etiqueta para el resto de la cohorte en la leyenda.
+        consensus_threshold_pct : float, default=60.0
+            Umbral porcentual mínimo de consenso en el subgrupo.
+        ignore_cols : list of str, optional
+            Columnas adicionales a ignorar.
+        max_factors : int, default=10
+            Número máximo de factores a graficar.
+        subcohort_color : str
+            Color para las barras de la subcohorte.
+        rest_color : str
+            Color para las barras del resto.
+        title : str or bool, optional
+            Título del gráfico. Si es None o True (y show_title=True), se genera automáticamente
+            el título con el umbral de consenso. Si es False o "", o si show_title=False, se omite el título.
+        show_title : bool, default=True
+            Indica si se debe mostrar el título en el eje. Pasar False para suprimir el título.
+        ax : plt.Axes, optional
+            Eje de matplotlib donde renderizar.
+        figsize : tuple, default=(10.0, 5.5)
+            Dimensiones de la figura.
+        filepath : str, optional
+            Ruta para exportar.
+        dpi : int, default=300
+            Resolución en DPI.
         """
         mask = pd.Series(subcohort_mask, index=self.df.index).astype(bool)
         subgrupo = self.df[mask].copy()
         resto = self.df[~mask].copy()
 
         default_ignore = [
-            "Muestra_Codificada", "ID", "Mercurio_ug_L", "Plomo_ug_dL", "Cadmio_ug_L",
-            "Score_Riesgo", "Es_Expuesto"
+            "Muestra_Codificada", "ID", "id", "sample_id",
+            "Plomo_ug_dL", "Mercurio_ug_L", "Cadmio_ug_L",
+            "Plomo", "Mercurio", "Cadmio", "pb", "hg", "cd",
+            "Score_Riesgo", "Es_Expuesto", "es_expuesto",
+            "Riesgo_Pb", "Riesgo_Hg", "Riesgo_Cd", "Nivel_Riesgo",
+            "IMC", "Peso_kg", "Altura_cm", "Edad",
         ]
         if ignore_cols:
             default_ignore.extend(ignore_cols)
-
-        etiquetas_dieta = {
-            0: "Nunca", 1: "Rara vez", 2: "A veces", 3: "Frecuentemente", 4: "Diario"
-        }
 
         factores_compartidos = []
         for c in self.df.columns:
@@ -527,10 +707,10 @@ class SubcohortPlots:
                 diff_pct = pct_sub - pct_res
 
                 cat_repr = str(cat_top)
-                if c.startswith("Alim_") and cat_top in etiquetas_dieta:
-                    cat_repr = f"{cat_top} ({etiquetas_dieta[cat_top]})"
+                if c.startswith("Alim_") and cat_top in DEFAULT_DIETARY_MAP:
+                    cat_repr = f"{cat_top} ({DEFAULT_DIETARY_MAP[cat_top]})"
 
-                clean_var = c.replace("Exposicion_", "Exp_").replace("Salud_", "")
+                clean_var = c.replace("Exposicion_", "Exp_").replace("Salud_", "").replace("Alim_", "").replace("_", " ").title()
                 factores_compartidos.append({
                     "Variable": c,
                     "Etiqueta": f"{clean_var} = {cat_repr}",
@@ -544,7 +724,6 @@ class SubcohortPlots:
             df_compartidos = df_compartidos.sort_values(
                 by=["Diferencial_%", "Prevalencia_Subgrupo_%"], ascending=[False, False]
             ).head(max_factors)
-            # Ordenar ascendente para la gráfica horizontal
             df_plot = df_compartidos.sort_values(by="Diferencial_%", ascending=True)
         else:
             df_plot = pd.DataFrame(columns=["Etiqueta", "Prevalencia_Subgrupo_%", "Prevalencia_Resto_%"])
@@ -586,11 +765,15 @@ class SubcohortPlots:
         ax.grid(axis="x", linestyle=":", alpha=0.6)
         self._clean_spines_and_ticks(ax)
 
-        if title:
-            ax.set_title(title, fontsize=10.5, fontweight="bold", loc="left")
+        default_title = f"C. Factores Compartidos con Mayor Sobre-Representación (Consenso >= {consensus_threshold_pct:.0f}%)"
+        
+        # Manejo de título opcional
+        if show_title and title is not False and (not isinstance(title, str) or title.strip() != ""):
+            resolved_title = title if (isinstance(title, str) and title.strip()) else default_title
+            ax.set_title(resolved_title, fontsize=10.5, fontweight="bold", loc="left")
         else:
-            ax.set_title(f"C. Factores Compartidos con Mayor Sobre-Representación (Consenso >= {consensus_threshold_pct:.0f}%)",
-                         fontsize=10.5, fontweight="bold", loc="left")
+            ax.set_title("", loc="left")
+            ax.set_title("", loc="center")
 
         if filepath:
             self._save_figure(fig, filepath=filepath, dpi=dpi)
@@ -601,7 +784,7 @@ class SubcohortPlots:
         self: BivariateBasePlots,
         target_metal: Optional[str] = None,
         metal: Optional[str] = None,
-        criterion_col: str = "Alim_Leguminosas",
+        criterion_col: Optional[str] = None,
         criterion_val: Optional[Any] = None,
         comparison_op: str = "==",
         method: str = "nonparametric",
@@ -610,8 +793,17 @@ class SubcohortPlots:
         id_col: Optional[str] = None,
         annotate_ids: bool = False,
         show_ids: bool = False,
+        show_limit: bool = True,
+        permissible_limit: Optional[float] = None,
+        limit_label: Optional[str] = None,
         consensus_threshold_pct: float = 60.0,
         include_shared_factors: bool = True,
+        title: Optional[Union[str, bool]] = None,
+        show_title: bool = True,
+        show_titles: Optional[bool] = None,
+        title_ranking: Optional[Union[str, bool]] = None,
+        title_contrast: Optional[Union[str, bool]] = None,
+        title_factors: Optional[Union[str, bool]] = None,
         figsize: Tuple[float, float] = (16.0, 10.0),
         filepath: Optional[str] = None,
         dpi: int = 300,
@@ -619,23 +811,69 @@ class SubcohortPlots:
     ) -> Tuple[plt.Figure, Dict[str, plt.Axes], Dict[str, Any]]:
         """
         Mosaico editorial completo para análisis de subcohorte:
-        Combina en una cuadrícula multipanel:
+        Combina en una cuadrícula multipanel armonizada para Plomo, Mercurio o Cadmio:
           - Panel A: Ranking correlacional (Spearman rho o Pearson r).
-          - Panel B: Contraste toxicológico del biomarcador.
+          - Panel B: Contraste toxicológico del biomarcador con umbral de referencia.
           - Panel C (opcional): Factores compartidos y prevalencia diferencial.
+
+        Parameters
+        ----------
+        target_metal : str, optional
+            Columna de concentración del metal.
+        metal : str, optional
+            Alias de target_metal.
+        criterion_col : str, optional
+            Columna para definir el criterio de subcohorte.
+        criterion_val : Any, optional
+            Valor modal o específico para la subcohorte.
+        comparison_op : str, default="=="
+            Operador de comparación.
+        method : {"nonparametric", "parametric"}, default="nonparametric"
+            Método estadístico de análisis.
+        subcohort_label : str, optional
+            Etiqueta para la subcohorte.
+        rest_label : str, optional
+            Etiqueta para el resto de la cohorte.
+        id_col : str, optional
+            Columna de identificador.
+        annotate_ids : bool, default=False
+            Si es True, anota los IDs de cada participante.
+        show_ids : bool, default=False
+            Alias de annotate_ids.
+        show_limit : bool, default=True
+            Si es True, traza el umbral de referencia toxicológico.
+        permissible_limit : float, optional
+            Límite de referencia toxicológico personalizado.
+        limit_label : str, optional
+            Etiqueta para la línea de referencia.
+        consensus_threshold_pct : float, default=60.0
+            Umbral porcentual de consenso para factores compartidos.
+        include_shared_factors : bool, default=True
+            Si es True, incluye el Panel C con factores compartidos.
+        title : str or bool, optional
+            Título global superior (suptitle) del mosaico. Si es None, False o "", no se renderiza suptitle.
+        show_title : bool, default=True
+            Indica si se deben mostrar los títulos individuales en los paneles A, B y C del mosaico.
+            Pasar False para omitir todos los títulos en los paneles.
+        show_titles : bool, optional
+            Alias de show_title.
+        title_ranking : str or bool, optional
+            Título específico para el Panel A (Ranking de Similitud). Si es False o "", se omite.
+        title_contrast : str or bool, optional
+            Título específico para el Panel B (Contraste de Subcohorte). Si es False o "", se omite.
+        title_factors : str or bool, optional
+            Título específico para el Panel C (Factores Compartidos). Si es False o "", se omite.
+        figsize : tuple, default=(16.0, 10.0)
+            Dimensiones de la figura.
+        filepath : str, optional
+            Ruta para exportar.
+        dpi : int, default=300
+            Resolución en DPI.
         """
-        target_m = (
-            target_metal
-            or metal
-            or kwargs.get("target")
-            or kwargs.get("col_metal")
-            or getattr(self, "default_metal", "Mercurio_ug_L")
-        )
-        target_metal = self._resolve_column(target_m)
+        metal_resolved = self._resolve_target_metal(target_metal, metal, **kwargs)
+        col_crit = self._resolve_default_criterion(metal_resolved, criterion_col)
 
         fig = plt.figure(figsize=figsize, dpi=dpi)
-
-        col_crit = self._resolve_column(criterion_col)
         s = self.df[col_crit]
 
         # Si criterion_val es None, seleccionar la categoría modal (mayor número de muestras)
@@ -645,7 +883,7 @@ class SubcohortPlots:
 
         # Determinar etiqueta automática del subgrupo si no se suministra
         if subcohort_label is None:
-            clean_crit = criterion_col.replace("Alim_", "").replace("Salud_", "").replace("Exposicion_", "").replace("_", " ").title()
+            clean_crit = col_crit.replace("Alim_", "").replace("Salud_", "").replace("Exposicion_", "").replace("_", " ").title()
             cat_desc = DEFAULT_DIETARY_MAP.get(criterion_val, str(criterion_val))
             op_sym = "=" if comparison_op == "==" else comparison_op
             subcohort_label = f"{clean_crit} {op_sym} {cat_desc}"
@@ -664,6 +902,16 @@ class SubcohortPlots:
         else:
             raise ValueError(f"Operador '{comparison_op}' no reconocido.")
 
+        # Resolución de visibilidad de títulos de paneles y suptitle
+        effective_show_titles = show_titles if show_titles is not None else show_title
+        if title is False or (isinstance(title, str) and title.strip() == ""):
+            if show_titles is None and not kwargs.get("keep_panel_titles", False):
+                effective_show_titles = False
+
+        sim_title = title_ranking if title_ranking is not None else (None if effective_show_titles else False)
+        contrast_title = title_contrast if title_contrast is not None else (None if effective_show_titles else False)
+        factors_title = title_factors if title_factors is not None else (None if effective_show_titles else False)
+
         axes_dict: Dict[str, plt.Axes] = {}
         results_dict: Dict[str, Any] = {}
 
@@ -674,13 +922,15 @@ class SubcohortPlots:
             ax3 = fig.add_subplot(gs[1, :])
 
             _, _, df_sim = self.similarity_ranking_plot(
-                target_metal=target_metal,
-                highlight_item=criterion_col,
+                target_metal=metal_resolved,
+                highlight_item=col_crit,
                 method=method,
+                title=sim_title,
+                show_title=effective_show_titles if sim_title is None else (sim_title is not False and (not isinstance(sim_title, str) or sim_title.strip() != "")),
                 ax=ax1,
             )
             _, _, stats_dict = self.subcohort_contrast_plot(
-                target_metal=target_metal,
+                target_metal=metal_resolved,
                 subcohort_mask=mask,
                 method=method,
                 subcohort_label=subcohort_label,
@@ -688,6 +938,11 @@ class SubcohortPlots:
                 id_col=id_col,
                 annotate_ids=annotate_ids,
                 show_ids=show_ids,
+                show_limit=show_limit,
+                permissible_limit=permissible_limit,
+                limit_label=limit_label,
+                title=contrast_title,
+                show_title=effective_show_titles if contrast_title is None else (contrast_title is not False and (not isinstance(contrast_title, str) or contrast_title.strip() != "")),
                 ax=ax2,
             )
             _, _, df_shared = self.shared_factors_plot(
@@ -695,12 +950,17 @@ class SubcohortPlots:
                 subcohort_label=subcohort_label,
                 rest_label=rest_label or "Resto Cohorte",
                 consensus_threshold_pct=consensus_threshold_pct,
-                ignore_cols=[criterion_col],
+                ignore_cols=[col_crit],
+                title=factors_title,
+                show_title=effective_show_titles if factors_title is None else (factors_title is not False and (not isinstance(factors_title, str) or factors_title.strip() != "")),
                 ax=ax3,
             )
 
             axes_dict = {"ax_similarity": ax1, "ax_contrast": ax2, "ax_factors": ax3}
             results_dict = {
+                "metal": metal_resolved,
+                "criterion_col": col_crit,
+                "criterion_val": criterion_val,
                 "similarity_df": df_sim,
                 "contrast_stats": stats_dict,
                 "shared_factors_df": df_shared,
@@ -711,13 +971,15 @@ class SubcohortPlots:
             ax2 = fig.add_subplot(gs[0, 1])
 
             _, _, df_sim = self.similarity_ranking_plot(
-                target_metal=target_metal,
-                highlight_item=criterion_col,
+                target_metal=metal_resolved,
+                highlight_item=col_crit,
                 method=method,
+                title=sim_title,
+                show_title=effective_show_titles if sim_title is None else (sim_title is not False and (not isinstance(sim_title, str) or sim_title.strip() != "")),
                 ax=ax1,
             )
             _, _, stats_dict = self.subcohort_contrast_plot(
-                target_metal=target_metal,
+                target_metal=metal_resolved,
                 subcohort_mask=mask,
                 method=method,
                 subcohort_label=subcohort_label,
@@ -725,20 +987,35 @@ class SubcohortPlots:
                 id_col=id_col,
                 annotate_ids=annotate_ids,
                 show_ids=show_ids,
+                show_limit=show_limit,
+                permissible_limit=permissible_limit,
+                limit_label=limit_label,
+                title=contrast_title,
+                show_title=effective_show_titles if contrast_title is None else (contrast_title is not False and (not isinstance(contrast_title, str) or contrast_title.strip() != "")),
                 ax=ax2,
             )
 
             axes_dict = {"ax_similarity": ax1, "ax_contrast": ax2}
             results_dict = {
+                "metal": metal_resolved,
+                "criterion_col": col_crit,
+                "criterion_val": criterion_val,
                 "similarity_df": df_sim,
                 "contrast_stats": stats_dict,
             }
+
+        has_suptitle = isinstance(title, str) and title.strip() != ""
+        if has_suptitle:
+            fig.suptitle(title, fontsize=12, fontweight="bold", y=0.995)
 
         import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             try:
-                fig.tight_layout()
+                if has_suptitle:
+                    fig.tight_layout(rect=[0, 0, 1, 0.96])
+                else:
+                    fig.tight_layout()
             except Exception:
                 pass
         if filepath:
@@ -750,11 +1027,13 @@ class SubcohortPlots:
         self: BivariateBasePlots,
         target_metal: Optional[str] = None,
         metal: Optional[str] = None,
-        candidate_cols: Optional[List[str]] = None,
+        candidate_cols: Optional[Union[List[str], str]] = None,
         method: str = "nonparametric",
         alpha: float = 0.05,
         test_all_categories: bool = False,
         min_n: int = 2,
+        show_limit: bool = True,
+        permissible_limit: Optional[float] = None,
         plot_significant: bool = True,
         filepath_prefix: Optional[str] = None,
         **kwargs: Any,
@@ -762,7 +1041,7 @@ class SubcohortPlots:
         """
         Itera y evalúa contrastes toxicológicos de carga corporal a través de un conjunto
         de variables (e.g. dieta o exposición), identificando aquellas con diferencias
-        estadísticamente significativas (p < alpha).
+        estadísticamente significativas (p < alpha) para Plomo, Mercurio o Cadmio.
 
         Parameters
         ----------
@@ -770,7 +1049,7 @@ class SubcohortPlots:
             Columna con las concentraciones biológicas del metal.
         metal : str, optional
             Alias de target_metal.
-        candidate_cols : list of str, optional
+        candidate_cols : list of str or str, optional
             Columnas a escanear. Por defecto, todas las columnas que inician con 'Alim_'.
         method : {"nonparametric", "parametric"}, default="nonparametric"
             Método estadístico: "nonparametric" (Mann-Whitney U) o "parametric" (t de Welch).
@@ -781,6 +1060,10 @@ class SubcohortPlots:
             Si es True, evalúa todas las opciones individuales de consumo con N >= min_n.
         min_n : int, default=2
             Tamaño muestral mínimo por subgrupo para ser evaluado.
+        show_limit : bool, default=True
+            Si es True, muestra la línea de límite de referencia en los gráficos generados.
+        permissible_limit : float, optional
+            Límite de referencia toxicológico personalizado.
         plot_significant : bool, default=True
             Si es True, genera y muestra automáticamente el subcohort_contrast_plot para
             cada variable o categoría que resulte estadísticamente significativa.
@@ -792,19 +1075,21 @@ class SubcohortPlots:
         pd.DataFrame
             Tabla consolidada con todas las comparaciones ordenadas ascendentemente por p-valor.
         """
-        target_m = (
-            target_metal
-            or metal
-            or kwargs.get("target")
-            or kwargs.get("col_metal")
-            or getattr(self, "default_metal", "Mercurio_ug_L")
-        )
-        metal_resolved = self._resolve_column(target_m)
-        if metal_resolved not in self.df.columns:
-            raise ValueError(f"Columna de metal '{metal_resolved}' no encontrada en el DataFrame.")
+        metal_resolved = self._resolve_target_metal(target_metal, metal, **kwargs)
 
         if candidate_cols is None:
             candidate_cols = [c for c in self.df.columns if c.startswith("Alim_")]
+        elif isinstance(candidate_cols, str):
+            candidate_cols = [candidate_cols]
+        else:
+            candidate_cols = list(candidate_cols)
+
+        # Excluir metales pesados y columnas de riesgo
+        exclude_set = set(DEFAULT_PRIMARY_METALS) | {
+            metal_resolved, "Muestra_Codificada", "ID", "Score_Riesgo", "Es_Expuesto",
+            "Riesgo_Pb", "Riesgo_Hg", "Riesgo_Cd", "Nivel_Riesgo", "IMC", "Peso_kg", "Altura_cm"
+        }
+        candidate_cols = [c for c in candidate_cols if c not in exclude_set]
 
         is_parametric = self._is_parametric(method, **kwargs)
         metal_series = pd.to_numeric(self.df[metal_resolved], errors="coerce")
@@ -855,6 +1140,7 @@ class SubcohortPlots:
                     g_val = float(d_v * (1.0 - (3.0 / (4.0 * (n1 + n2) - 9.0)))) if (n1 + n2 > 2) else 0.0
 
                     rec = {
+                        "Metal": metal_resolved,
                         "Variable": col_res,
                         "Nombre": clean_name,
                         "Valor": val,
@@ -878,6 +1164,7 @@ class SubcohortPlots:
                     r_rb = 1.0 - (2.0 * float(u_stat) / (n_sub * n_res)) if (n_sub * n_res) > 0 else 0.0
 
                     rec = {
+                        "Metal": metal_resolved,
                         "Variable": col_res,
                         "Nombre": clean_name,
                         "Valor": val,
@@ -907,11 +1194,15 @@ class SubcohortPlots:
                 c_col, c_val, c_desc, p_v = item
                 save_fp = f"{filepath_prefix}_{c_col}_val{c_val}.png" if filepath_prefix else None
                 self.subcohort_contrast_plot(
-                    target_metal=target_metal,
+                    target_metal=metal_resolved,
                     criterion_col=c_col,
                     criterion_val=c_val,
                     method=method,
                     annotate_ids=False,
+                    show_limit=show_limit,
+                    permissible_limit=permissible_limit,
+                    title=kwargs.get("title", None),
+                    show_title=kwargs.get("show_title", True),
                     filepath=save_fp,
                 )
                 plt.show()
